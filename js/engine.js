@@ -370,8 +370,8 @@
     return pick(['butler', 'zimmer', 'katze', 'analyst', 'gaertner'], rnd);
   }
 
-  function describe(cl, tokens, rnd) {
-    const wid = witnessFor(cl, tokens, rnd);
+  function describe(cl, tokens, rnd, witnesses) {
+    const wid = witnesses ? pick(witnesses, rnd) : witnessFor(cl, tokens, rnd);
     const w = FD.WITNESSES[wid];
     const prefix = pick(w.prefix, rnd);
     const body = clueText(cl, tokens, rnd);
@@ -400,20 +400,20 @@
       level: meta.level, levelName: level.name, n: board.n, mapName: FD.MAPS[board.mapId].name,
       board: { n: board.n, cells: board.cells.map(({ i, r, c, room, obj, blocked }) => ({ i, r, c, room, obj, blocked })), rooms: board.rooms },
       tokens, clues, solution: pos, culprit, snack: tokens[nDogs].id, culpritRoom: snackRoom,
-      verdict: `${tokens[culprit].name} zündete ${FD.ROOMS[snackRoom].in} mit ${FD.SNACKS[tokens[nDogs].id].name} die Gaswolke!`,
+      verdict: `${tokens[culprit].name} zündete ${FD.ROOMS[snackRoom].in} mit ${FD.SNACKS[tokens[nDogs].id].name} die Gaswolke!${meta.verdictSuffix ? ' ' + meta.verdictSuffix : ''}`,
     };
   }
 
-  function generate({ id, no, title, story, level, map, snack, dogs, seed }) {
+  function generate({ id, no, title, story, level, map, snack, dogs, seed, witnesses, verdictSuffix }) {
     const rnd = rng(seed);
     const board = buildBoard(map);
     const nTok = board.n;
-    const dogIds = dogs || shuffle(FD.DOGS.map((d) => d.id), rnd).slice(0, nTok - 1);
+    const dogIds = dogs || shuffle(FD.DOGS.filter((d) => !d.guest).map((d) => d.id), rnd).slice(0, nTok - 1);
     const tokens = makeTokens(dogIds, snack);
     const pos = randomSolution(board, nTok, rnd);
     const raw = generateClues(board, pos, level, rnd);
-    const clues = raw.map((cl) => ({ subject: cl.t, ...describe(cl, tokens, rnd), rule: cl }));
-    return finish({ id, no, title, story, level }, board, tokens, pos, clues);
+    const clues = raw.map((cl) => ({ subject: cl.t, ...describe(cl, tokens, rnd, witnesses), rule: cl }));
+    return finish({ id, no, title, story, level, verdictSuffix }, board, tokens, pos, clues);
   }
 
   // Handgebaute Fälle: Hinweise vorgegeben, Lösung per Löser ermittelt.

@@ -55,3 +55,11 @@ test('Zufallsfälle für alle Größen und Stufen', () => {
     }
   }
 });
+
+test('Gaststars tauchen nicht in Zufallsfällen auf', () => {
+  const guests = FD.DOGS.filter((d) => d.guest).map((d) => d.id);
+  for (let s = 1; s <= 20; s++) {
+    const p = FD.generateRandom({ n: 8, level: 2, seed: s });
+    assert.ok(p.tokens.every((t) => !guests.includes(t.id)));
+  }
+});

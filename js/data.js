@@ -46,6 +46,12 @@
       quirk: 'Postet jeden Snack, bevor sie ihn frisst.',
       fartClass: 'No. 5',
     },
+    {
+      id: 'leia', name: 'Prinzessin Leia', color: '#3B5BDB', title: 'Die Rebellin', guest: true,
+      bio: 'Frenchie auf Staatsbesuch aus einer weit, weit entfernten WG. Trägt zwei Zimtschnecken als Frisur und geheime Pläne im Halsband.',
+      quirk: '„Hilf mir, Obi-Wan Kenobi. Du bist meine einzige Hoffnung … auf frische Luft.“',
+      fartClass: 'Todesstern-Klasse',
+    },
   ];
 
   FD.SNACKS = {
@@ -116,6 +122,8 @@
     zimmer: { name: 'Das Zimmermädchen', prefix: ['Ich hab nix gesagt, aber:', 'Also, unter uns:', ''] },
     katze: { name: 'Die Nachbarskatze', prefix: ['Miau. Übersetzt:', 'Mrrr …', ''] },
     analyst: { name: 'Der Tatort-Analyst', prefix: ['Spurenlage eindeutig:', 'Laut Geruchsprofil:', ''] },
+    droide: { name: 'Der Protokolldroide', prefix: ['Oh je, oh je!', 'Die Wahrscheinlichkeit liegt bei 3720 zu 1, aber:', 'Ich spreche sechs Millionen Sprachen, und in allen gilt:'] },
+    wookiee: { name: 'Der Wookiee', prefix: ['Rrraaaaugh! Übersetzt:', 'Hrrrrnnnngh! Soll heißen:', 'Aaaarrrgh!'] },
   };
 
   // Schlosspläne. rooms: ein Buchstabe pro Feld (siehe ROOM_CODES).
@@ -228,6 +236,12 @@
     {
       id: 'fall-12', no: 12, salt: '14', title: 'Biologischer Ökodemozid', level: 4, map: 'gesamtplan', snack: 'bohnen',
       story: 'Das Ozonloch über dem Schloss hat jetzt einen eigenen Namen. Alle sieben Frenchies sind verdächtig. Keiner hat ein Alibi.',
+    },
+    {
+      id: 'fall-13', no: 13, salt: '3', title: 'Das Imperium pupst zurück', level: 2, map: 'obergeschoss', snack: 'bohnen',
+      guest: 'leia', dogs: ['leia', 'pierre', 'pupsalot', 'bruno', 'mimi'], witnesses: ['droide', 'wookiee', 'butler'],
+      story: 'Vor langer Zeit, in einem gar nicht so weit entfernten Schloss … Prinzessin Leia landet zum Staatsbesuch im Obergeschoss. Minuten später: Gasalarm. Der Protokolldroide rechnet, der Wookiee heult. War es die dunkle Seite der Bohne?',
+      verdictSuffix: 'Möge der Mief mit dir sein.',
     },
   ];
 

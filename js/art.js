@@ -253,6 +253,19 @@ const ACC = {
     s += L('M28 57 Q30 51 36 50', WHITE, 3) + C(33, 61, 1.6, WHITE);
     s += L('M68 57 Q70 51 76 50', WHITE, 3) + C(73, 61, 1.6, WHITE);
     return s;
+  },
+  leia() {
+    // Prinzessinnen-Schnecken an beiden Kopfseiten + weißes Rebellen-Gewand
+    let s = '';
+    for (const [cx, dir] of [[13.5, 1], [106.5, -1]]) {
+      s += C(cx, 68, 11.5, '#6B3F24', 3);
+      s += L(`M${cx} 68 m${-3 * dir} 0 a3 3 0 1 ${dir > 0 ? 1 : 0} ${6 * dir} 0 a6 6 0 1 ${dir > 0 ? 1 : 0} ${-11 * dir} 1 a8.5 8.5 0 1 ${dir > 0 ? 1 : 0} ${15 * dir} -3`, '#A26A40', 2);
+      s += L(`M${cx - 6 * dir} 60.5 Q${cx} 57.5 ${cx + 6 * dir} 60.5`, '#C4895A', 1.8);
+    }
+    s += P('M31 99 Q60 110 89 99 L95 119 L25 119 Z', WHITE, 3);
+    s += L('M44 105 L41 119 M76 105 L79 119', '#D8D2E0', 2);
+    s += P('M52 106.5 Q60 108.5 68 106.5 L60 114 Z', '#E9E4F0', 2);
+    return s;
   }
 };
 
@@ -576,7 +589,7 @@ function clothespin() {
 
 FD.art = {
   frenchie, snack, object, logoMascot, cloud, clothespin,
-  DOG_IDS: ['pierre', 'pupsalot', 'bruno', 'mimi', 'gaston', 'baron', 'coco'],
+  DOG_IDS: ['pierre', 'pupsalot', 'bruno', 'mimi', 'gaston', 'baron', 'coco', 'leia'],
   SNACK_KEYS: Object.keys(SNACKS),
   OBJECT_KEYS: Object.keys(OBJECTS)
 };
