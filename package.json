@@ -1,0 +1,11 @@
+{
+  "name": "fartdoku",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fartdoku – ein Rätsel, das zum Himmel stinkt. Logikrätsel nach dem Murdoku-Prinzip.",
+  "scripts": {
+    "test": "node --test tests/engine.test.js",
+    "build": "node tools/build.js && node tools/build.js --fragment",
+    "start": "npx --yes http-server -p 5173 -c-1 ."
+  }
+}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Fartdoku Art Preview</title>
+<style>
+  body { background: #FFF4E6; font-family: system-ui, sans-serif; color: #16121A; margin: 16px; }
+  h2 { margin: 18px 0 6px; font-size: 16px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .cell { display: flex; flex-direction: column; align-items: center; font-size: 10px; gap: 2px; }
+  .box svg { width: 100%; height: 100%; display: block; }
+  .b120 { width: 120px; height: 120px; background: #FFE3EE; border-radius: 10px; }
+  .b48 { width: 48px; height: 48px; background: #E3F4FF; border-radius: 6px; }
+  .b40 { width: 40px; height: 40px; background: #F0E6FF; }
+  .b28 { width: 28px; height: 28px; background: #E6F7DD; }
+  .b300 { width: 300px; height: 240px; background: #FFF9C9; border-radius: 12px; }
+  .b100 { width: 150px; height: 105px; background: #E3F4FF; }
+</style>
+</head>
+<body>
+<h2>Frenchies</h2><div id="dogs"></div>
+<h2>Snacks</h2><div id="snacks" class="row"></div>
+<h2>Objects</h2><div id="objects" class="row"></div>
+<h2>Logo, clouds, clothespin</h2><div id="misc" class="row"></div>
+<script src="js/art.js"></script>
+<script>
+  const A = Fartdoku.art;
+  const box = (cls, html, label) => `<div class="cell"><div class="box ${cls}">${html}</div>${label || ''}</div>`;
+  let h = '';
+  for (const id of A.DOG_IDS.concat(['unknown'])) {
+    h += '<div class="row">';
+    for (const mood of ['normal', 'guilty', 'smug']) h += box('b120', A.frenchie(id, { mood, tongue: mood === 'normal' && id === 'gaston' }), id + ' ' + mood);
+    for (const mood of ['normal', 'guilty', 'smug']) h += box('b48', A.frenchie(id, { mood }), mood);
+    h += '</div>';
+  }
+  document.getElementById('dogs').innerHTML = h;
+  document.getElementById('snacks').innerHTML = A.SNACK_KEYS.map(k => box('b40', A.snack(k), k) + box('b28', A.snack(k))).join('');
+  document.getElementById('objects').innerHTML = A.OBJECT_KEYS.map(k => box('b40', A.object(k), k) + box('b28', A.object(k))).join('');
+  document.getElementById('misc').innerHTML = box('b300', A.logoMascot(), 'logo') +
+    [0, 1, 2].map(v => box('b100', A.cloud(v), 'cloud ' + v)).join('') + box('b40', A.clothespin(), 'pin') + box('b28', A.clothespin());
+</script>
+</body>
+</html>

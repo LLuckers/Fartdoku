@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fartdoku</title>
+  <meta name="description" content="Fartdoku – ein Logikrätsel, das zum Himmel stinkt. Finde heraus, welcher Frenchie im Schloss Le Pups die Gaswolke gezündet hat.">
+  <meta name="theme-color" content="#FFD23F">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M18 72a16 16 0 0 1 4-30a22 22 0 0 1 40-12a20 20 0 0 1 30 18a14 14 0 0 1-4 24Z' fill='%2386E05A' stroke='%2316121A' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Luckiest+Guy&family=Patrick+Hand&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <noscript>
+      <main class="wrap loading"><div class="loading-card"><p>Fartdoku braucht JavaScript – ohne riecht man hier leider gar nichts.</p></div></main>
+    </noscript>
+  </div>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog id="rules-dialog" class="modal" aria-labelledby="rules-title"></dialog>
+
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
