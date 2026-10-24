@@ -14,15 +14,19 @@
   .b40 { width: 40px; height: 40px; background: #F0E6FF; }
   .b28 { width: 28px; height: 28px; background: #E6F7DD; }
   .b300 { width: 300px; height: 240px; background: #FFF9C9; border-radius: 12px; }
+  .tok { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: #FFF9F0; box-shadow: 0 0 0 4px var(--c, #999), 0 0 0 6px #16121A; margin: 6px; }
   .b100 { width: 150px; height: 105px; background: #E3F4FF; }
 </style>
 </head>
 <body>
 <h2>Frenchies</h2><div id="dogs"></div>
+<h2>Line-up (token size)</h2><div id="lineup" class="row"></div>
 <h2>Snacks</h2><div id="snacks" class="row"></div>
 <h2>Objects</h2><div id="objects" class="row"></div>
 <h2>Logo, clouds, clothespin</h2><div id="misc" class="row"></div>
+<script src="js/data.js"></script>
 <script src="js/art.js"></script>
+<script src="js/art-props.js"></script>
 <script>
   const A = Fartdoku.art;
   const box = (cls, html, label) => `<div class="cell"><div class="box ${cls}">${html}</div>${label || ''}</div>`;
@@ -31,9 +35,14 @@
     h += '<div class="row">';
     for (const mood of ['normal', 'guilty', 'smug']) h += box('b120', A.frenchie(id, { mood, tongue: mood === 'normal' && id === 'gaston' }), id + ' ' + mood);
     for (const mood of ['normal', 'guilty', 'smug']) h += box('b48', A.frenchie(id, { mood }), mood);
+    for (const mood of ['normal', 'guilty', 'smug']) h += box('b28', A.frenchie(id, { mood }), mood);
+    h += box('tok', A.frenchie(id, {}), 'token');
     h += '</div>';
   }
   document.getElementById('dogs').innerHTML = h;
+  document.getElementById('lineup').innerHTML = (Fartdoku.DOGS || []).map(d =>
+    `<div class="cell"><div class="box tok" style="--c:${d.color}">${A.frenchie(d.id, {})}</div></div>`).join('') +
+    A.DOG_IDS.map(id => box('b28', A.frenchie(id, {}))).join('');
   document.getElementById('snacks').innerHTML = A.SNACK_KEYS.map(k => box('b40', A.snack(k), k) + box('b28', A.snack(k))).join('');
   document.getElementById('objects').innerHTML = A.OBJECT_KEYS.map(k => box('b40', A.object(k), k) + box('b28', A.object(k))).join('');
   document.getElementById('misc').innerHTML = box('b300', A.logoMascot(), 'logo') +

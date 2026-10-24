@@ -53,69 +53,155 @@ function stink(d, w) {
 /* ------------------------------------------------------------------ */
 /* FRENCHIE                                                            */
 /* ------------------------------------------------------------------ */
+/* Every dog = shared face rig (faceBase) driven by a LOOK (fur, head shape, ears,
+ * eyes, pattern) + a big caricature accessory set (ACC). Unknown ids get LOOKS.plain. */
 const EAR_L = 'M21 60 C8 44 5 27 10 13 Q15 3 27 8 C41 15 51 27 54 42 Z';
 const EAR_L_IN = 'M25 50 C17 39 14 28 17 18 Q20 12 27 15 C36 20 43 29 46 40 Z';
+const EAR_L_HI = 'M26 45 C21 37 19 29 20 21';
 // right ear with a bite taken out (bruno)
 const EAR_R_NOTCH = 'M99 60 C110 46 114 36 114 31 L106.5 27.5 L112.8 21.5 C112.3 17 111.5 15 110 13 Q105 3 93 8 C79 15 69 27 66 42 Z';
-const HEAD = 'M60 33 C89 33 107 47 107 68 C107 92 90 104 60 104 C30 104 13 92 13 68 C13 47 31 33 60 33 Z';
+// right ear flopped over (gaston)
+const EAR_R_FOLD = 'M66 44 C72 30 92 24 106 30 C115 34 118 46 114 56 Q110 62 105 56 C101 49 94 46 84 48 Z';
+const EAR_R_FOLD_IN = 'M84 44 C92 38 102 38 108 44 C111 48 111 52 109 55 C104 48 96 45 84 46 Z';
+const HEADS = {
+  base:   'M60 33 C89 33 107 47 107 68 C107 92 90 104 60 104 C30 104 13 92 13 68 C13 47 31 33 60 33 Z',
+  narrow: 'M60 31 C85 31 101 46 101 68 C101 93 86 105 60 105 C34 105 19 93 19 68 C19 46 35 31 60 31 Z',
+  boxy:   'M60 35 C96 35 113 46 113 68 C113 96 97 106 60 106 C23 106 7 96 7 68 C7 46 24 35 60 35 Z',
+  dainty: 'M60 36 C86 36 102 49 102 69 C102 91 87 102 60 102 C33 102 18 91 18 69 C18 49 34 36 60 36 Z',
+  chubby: 'M60 34 C88 34 104 44 106 60 C116 70 114 94 96 101 C86 106 74 106 60 106 C46 106 34 106 24 101 C6 94 4 70 14 60 C16 44 32 34 60 34 Z',
+  jowly:  'M60 34 C86 34 102 46 104 64 C114 76 114 98 96 104 C84 109 72 107 60 107 C48 107 36 109 24 104 C6 98 6 76 16 64 C18 46 34 34 60 34 Z'
+};
 const MUZ = 'M60 69 C75 69 85 77 85 88 C85 98 73 102 60 102 C47 102 35 98 35 88 C35 77 45 69 60 69 Z';
 const NOSE = 'M50.5 75.5 Q60 70 69.5 75.5 Q71.5 81 64.5 84.5 Q60 86.5 55.5 84.5 Q48.5 81 50.5 75.5 Z';
 const EYE_L = [41, 63], EYE_R = [79, 63];
+const MIRROR = 'matrix(-1 0 0 1 120 0)';
+const mirror = inner => `<g transform="${MIRROR}">${inner}</g>`;
+const both = inner => inner + mirror(inner);
+const side = (v, i) => Array.isArray(v) ? v[i] : v;
 
-function eye(cx, cy, mood) {
-  const dx = mood === 'guilty' ? -3 : (cx < 60 ? 0.6 : -0.6);
-  const dy = mood === 'smug' ? 2.5 : mood === 'guilty' ? 0 : 1;
-  const ix = cx + dx, iy = cy + dy;
-  let s = C(cx, cy, 11.5, WHITE, 3);
-  s += C(ix, iy, 8, '#5B3A28');
-  s += C(ix, iy, 5.2, '#0B080D');
+const LOOKS = {
+  // classic black frenchie (logo mascot, unknown ids)
+  plain: {},
+  // fawn with a cream muzzle
+  pierre: { fur: '#E39B55', muz: '#F7D5A3', wr: '#B8743A', sheen: '#F6BE80', brow: '#7A4520', lidHi: '#B8743A',
+    cheek: '#FF6B5E', earS: 1.04 },
+  // slate blue-grey, long narrow face
+  pupsalot: { fur: '#8792A8', muz: '#B4BCCC', wr: '#636D86', sheen: '#A6B0C3', brow: '#353B4D', lidHi: '#5D667D',
+    head: 'narrow', earS: 0.9, earRot: 5, eyeR: 11 },
+  // dark brindle bruiser, boxy head, small mean eyes
+  bruno: { fur: '#664430', muz: '#4E3222', wr: '#3E2617', sheen: '#87603F', brow: '#24160D', lidHi: '#4A2E1C',
+    head: 'boxy', earS: 0.88, earR: 'notch', eyeR: 9.6, grumpy: true,
+    pattern: () => L('M22 53 Q26 61 22 69 M14 66 Q18 74 14 82 M24 80 Q28 88 25 95 M98 53 Q94 61 98 69 M106 66 Q102 74 106 82 ' +
+      'M96 80 Q92 88 95 95 M41 40 Q45 46 43 52 M79 40 Q75 46 77 52 M32 45 Q35 50 33 55 M88 45 Q85 50 87 55', '#2C1A0F', 3.4) },
+  // pied: white with a black eye patch and black ears
+  mimi: { fur: '#FBF7F2', muz: '#FFF1F4', wr: '#E6D7DE', sheen: '#FFFFFF', brow: ['#A49AA8', '#3A2E36'],
+    lid: ['#221E24', '#FBF7F2'], lidHi: ['#6A6270', '#C9BCC4'], ear: '#221E24', head: 'dainty', eyeR: 13, lashes: true,
+    mouth: '#E0245E', mouthW: 4.4, cheek: PINK, cheekOp: 0.4,
+    pattern: () => P('M25 52 C29 42 45 40 54 47 C60 53 59 66 55 74 C49 80 35 80 28 74 C22 68 21 59 25 52 Z', '#221E24', 0) },
+  // chocolate, chubby cheeks, one flopped ear
+  gaston: { fur: '#B0612E', muz: '#F2C894', wr: '#84431C', sheen: '#CC8150', brow: '#4A240C', lidHi: '#84431C',
+    head: 'chubby', earR: 'fold', eyeR: 10.5, cheek: '#FF5050', cheekOp: 0.6, cheekBig: true },
+  // black, pompous pear-shaped jowls
+  baron: { head: 'jowly', earS: 0.84, eyeR: 10.4, brow: '#C3BBC9',
+    pattern: () => L('M21 79 Q16 91 25 100 M99 79 Q104 91 95 100', '#3C3640', 2.8) },
+  // lilac it-girl with big ears
+  coco: { fur: '#D9B3D5', muz: '#F2DCEE', wr: '#B58CB2', sheen: '#EBCFE8', brow: '#6E4A6C', lidHi: '#A57BA2',
+    earS: 1.12, earRot: -6, nose: '#5A3050', cheek: PINK, cheekOp: 0.45 },
+  // cream, under a brown hairdo
+  leia: { fur: '#F2E2C4', muz: '#FFF7E8', wr: '#D5BE9B', sheen: '#FFF4DE', brow: '#6B3F24', lidHi: '#C9AE86' }
+};
+const LOOK_DEFAULT = {
+  fur: '#221E24', muz: '#332D36', wr: '#3C3640', sheen: '#4A4450', brow: '#9A92A0', lidHi: '#6A6270', lid: null,
+  ear: null, earS: 1, earRot: 0, earR: null, head: 'base', eyeR: 11.5, lashes: false, grumpy: false,
+  mouth: '#0B080D', mouthW: 3, nose: '#0B080D', cheek: EAR_PINK, cheekOp: 0.35, cheekBig: false, pattern: null
+};
+function lookOf(dogId) {
+  const own = Object.prototype.hasOwnProperty.call(LOOKS, dogId) ? LOOKS[dogId] : LOOKS.plain;
+  return Object.assign({}, LOOK_DEFAULT, own);
+}
+
+function eye(cx, cy, mood, lk, i) {
+  const k = lk.eyeR / 11.5;
+  const o = cx < 60 ? -1 : 1;  // outer side
+  const dx = mood === 'guilty' ? -3 * k : -0.6 * o;
+  const dy = (mood === 'smug' ? 2.5 : mood === 'guilty' ? 0 : 1) * k;
+  const ix = f1(cx + dx), iy = f1(cy + dy);
+  const r13 = f1(13 * k), r12 = f1(12 * k), r10 = f1(10 * k);
+  let s = C(cx, cy, f1(11.5 * k), WHITE, 3);
+  s += C(ix, iy, f1(8 * k), '#5B3A28');
+  s += C(ix, iy, f1(5.2 * k), '#0B080D');
   if (mood === 'smug') {
     // heavy half-closed lid, slightly slanted
-    const t = cx < 60 ? -1 : 1;
-    s += P(`M${cx - 13} ${cy + 1 - t} L${cx - 13} ${cy - 14} L${cx + 13} ${cy - 14} L${cx + 13} ${cy + 1 + t} Z`, FUR, 0);
-    s += L(`M${cx - 12} ${cy + 1 - t} Q${cx} ${cy - 1} ${cx + 12} ${cy + 1 + t}`, INK, 3.2);
-    s += L(`M${cx - 10} ${cy - 2 - t} Q${cx} ${cy - 4.5} ${cx + 10} ${cy - 2 + t}`, '#6A6270', 2);
-    s += C(ix - 3, iy + 1.5, 1.8, WHITE);
+    const t = -o;
+    s += P(`M${cx - r13} ${cy + 1 - t} L${cx - r13} ${f1(cy - 14 * k)} L${cx + r13} ${f1(cy - 14 * k)} L${cx + r13} ${cy + 1 + t} Z`,
+      side(lk.lid, i) || lk.fur, 0);
+    s += L(`M${cx - r12} ${cy + 1 - t} Q${cx} ${cy - 1} ${cx + r12} ${cy + 1 + t}`, INK, 3.2);
+    s += L(`M${cx - r10} ${f1(cy - 2 * k - t)} Q${cx} ${f1(cy - 4.5 * k)} ${cx + r10} ${f1(cy - 2 * k + t)}`, side(lk.lidHi, i), 2);
+    s += C(f1(ix - 3 * k), f1(iy + 1.5 * k), f1(1.8 * k), WHITE);
+    if (lk.lashes) {
+      const y0 = cy + 1 + t * o;
+      s += L(`M${cx + o * r12} ${y0} l${o * 5} -5 M${f1(cx + o * 7 * k)} ${f1(y0 - 1.2)} l${o * 3.5} -6 M${f1(cx + o * 2 * k)} ${f1(y0 - 2)} l${o * 1.5} -6.5`, INK, 2.6);
+    }
   } else {
-    s += C(ix - 3, iy - 3.2, 2.8, WHITE);
-    s += C(ix + 2.8, iy + 2.6, 1.3, WHITE);
+    s += C(f1(ix - 3 * k), f1(iy - 3.2 * k), f1(2.8 * k), WHITE);
+    s += C(f1(ix + 2.8 * k), f1(iy + 2.6 * k), f1(1.3 * k), WHITE);
+    if (lk.lashes) {
+      const R0 = 11.5 * k;
+      let d = '';
+      for (const a of [195, 222, 249]) {
+        const rad = (o < 0 ? a : 180 - a) * Math.PI / 180;
+        const cs = Math.cos(rad), sn = Math.sin(rad);
+        d += `M${f1(cx + R0 * cs)} ${f1(cy + R0 * sn)} L${f1(cx + (R0 + 6.5) * cs)} ${f1(cy + (R0 + 6.5) * sn)} `;
+      }
+      s += L(d, INK, 2.8);
+    }
   }
   return s;
 }
 
-function faceBase(mood, opts, notchEar) {
-  let s = '';
-  // ears
-  s += P(EAR_L, FUR, 3) + P(EAR_L_IN, EAR_PINK, 0) + L('M26 45 C21 37 19 29 20 21', '#FFB8D2', 2);
-  if (notchEar) {
-    s += P(EAR_R_NOTCH, FUR, 3);
-    s += `<g transform="matrix(-1 0 0 1 120 0)">${P(EAR_L_IN, EAR_PINK, 0)}</g>`;
+function ears(lk) {
+  const fill = lk.ear || lk.fur;
+  const tf = (px, rot) => `translate(${px} 50) rotate(${rot}) scale(${lk.earS}) translate(${-px} -50)`;
+  const left = P(EAR_L, fill, 3) + P(EAR_L_IN, EAR_PINK, 0) + L(EAR_L_HI, '#FFB8D2', 2);
+  let s = `<g transform="${tf(40, lk.earRot)}">${left}</g>`;
+  if (lk.earR === 'notch') {
+    s += `<g transform="${tf(80, -lk.earRot)}">${P(EAR_R_NOTCH, fill, 3)}${mirror(P(EAR_L_IN, EAR_PINK, 0))}</g>`;
+  } else if (lk.earR === 'fold') {
+    s += P(EAR_R_FOLD, fill, 3) + P(EAR_R_FOLD_IN, EAR_PINK, 0);
   } else {
-    s += `<g transform="matrix(-1 0 0 1 120 0)">${P(EAR_L, FUR, 3) + P(EAR_L_IN, EAR_PINK, 0) + L('M26 45 C21 37 19 29 20 21', '#FFB8D2', 2)}</g>`;
+    s += mirror(`<g transform="${tf(40, lk.earRot)}">${left}</g>`);
   }
+  return s;
+}
+
+function faceBase(mood, opts, lk) {
+  let s = ears(lk);
   // head
-  s += P(HEAD, FUR, 3);
-  s += L('M24 52 Q31 42 43 38', '#4A4450', 3);            // sheen
-  s += L('M48 44 Q60 39.5 72 44', WRINKLE, 2.6);           // forehead wrinkles
-  s += L('M51.5 50 Q60 46.5 68.5 50', WRINKLE, 2.4);
-  s += L('M60 53 L60 59', WRINKLE, 2.2);
+  s += P(HEADS[lk.head] || HEADS.base, lk.fur, 3);
+  if (lk.pattern) s += lk.pattern();
+  s += L('M24 52 Q31 42 43 38', lk.sheen, 3);              // sheen
+  s += L('M48 44 Q60 39.5 72 44', lk.wr, 2.6);             // forehead wrinkles
+  s += L('M51.5 50 Q60 46.5 68.5 50', lk.wr, 2.4);
+  s += L('M60 53 L60 59', lk.wr, 2.2);
   // muzzle + jowl hint + cheeks
-  s += P(MUZ, MUZZLE, 0);
-  s += L('M52 70.5 Q60 68 68 70.5', WRINKLE, 2);
-  s += E(25, 80, 6, 3.4, EAR_PINK) .replace('/>', ' opacity="0.35"/>');
-  s += E(95, 80, 6, 3.4, EAR_PINK) .replace('/>', ' opacity="0.35"/>');
+  s += P(MUZ, lk.muz, 0);
+  s += L('M52 70.5 Q60 68 68 70.5', lk.wr, 2);
+  const cr = lk.cheekBig ? [9, 5.5] : [6, 3.4];
+  s += E(25, 80, cr[0], cr[1], lk.cheek).replace('/>', ` opacity="${lk.cheekOp}"/>`);
+  s += E(95, 80, cr[0], cr[1], lk.cheek).replace('/>', ` opacity="${lk.cheekOp}"/>`);
   // eyes
-  s += eye(EYE_L[0], EYE_L[1], mood) + eye(EYE_R[0], EYE_R[1], mood);
+  s += eye(EYE_L[0], EYE_L[1], mood, lk, 0) + eye(EYE_R[0], EYE_R[1], mood, lk, 1);
   // brows
+  const bl = side(lk.brow, 0), br = side(lk.brow, 1);
   if (mood === 'guilty') {
-    s += L('M29 49 Q38 47.5 47 42', '#9A92A0', 3.4);
-    s += L('M91 49 Q82 47.5 73 42', '#9A92A0', 3.4);
+    s += L('M29 49 Q38 47.5 47 42', bl, 3.4) + L('M91 49 Q82 47.5 73 42', br, 3.4);
   } else if (mood === 'smug') {
-    s += L('M30 47 Q39 45.5 49 47', '#9A92A0', 3.2);
-    s += L('M71 44 Q80 38.5 90 42.5', '#9A92A0', 3.2);
+    s += L('M30 47 Q39 45.5 49 47', bl, 3.2) + L('M71 44 Q80 38.5 90 42.5', br, 3.2);
+  } else if (lk.grumpy) {
+    s += L('M28 47 Q39 47 51 54', bl, 4.4) + L('M92 47 Q81 47 69 54', br, 4.4);
   }
   // nose
-  s += P(NOSE, '#0B080D', 2.5);
+  s += P(NOSE, lk.nose, 2.5);
   s += E(55.5, 75.8, 3, 1.5, '#9A92A0', 0, 0, -12);
   s += C(62.5, 75, 1, '#6A6270');
   // tongue (under the mouth lines)
@@ -124,21 +210,20 @@ function faceBase(mood, opts, notchEar) {
     s += L('M60 92 L60 97.5', '#D94B80', 2);
   }
   // mouth
-  const M = '#0B080D';
+  const M = lk.mouth, mw = lk.mouthW;
   if (mood === 'guilty') {
-    s += L('M60 85 L60 88', M, 3);
-    s += L('M46 92 Q50 88.5 54 91.5 Q58 94.5 62 91.5 Q66 88.5 70 91.5 Q72 93 74 92', M, 3);
+    s += L('M60 85 L60 88', '#0B080D', 3);
+    s += L('M46 92 Q50 88.5 54 91.5 Q58 94.5 62 91.5 Q66 88.5 70 91.5 Q72 93 74 92', M, mw);
   } else if (mood === 'smug') {
-    s += L('M60 85 L60 88.5 M60 88.5 Q55 92.5 49 90.5 M60 88.5 Q69 94 77 85.5', M, 3);
+    s += L('M60 85 L60 88.5', '#0B080D', 3) + L('M60 88.5 Q55 92.5 49 90.5 M60 88.5 Q69 94 77 85.5', M, mw);
   } else {
-    s += L('M60 85 L60 88.5 M60 88.5 Q54 95 46.5 90.5 M60 88.5 Q66 95 73.5 90.5', M, 3);
-  }
-  // guilty sweat drop
-  if (mood === 'guilty') {
-    s += P('M103 34 Q110 45 106.5 50 Q103 53.5 99.5 50 Q96 45 103 34 Z', SKY, 2.5);
-    s += E(101.5, 46, 1.3, 2.4, WHITE, 0, 0, 20);
+    s += L('M60 85 L60 88.5', '#0B080D', 3) + L('M60 88.5 Q54 95 46.5 90.5 M60 88.5 Q66 95 73.5 90.5', M, mw);
   }
   return s;
+}
+
+function sweatDrop() {
+  return P('M103 34 Q110 45 106.5 50 Q103 53.5 99.5 50 Q96 45 103 34 Z', SKY, 2.5) + E(101.5, 46, 1.3, 2.4, WHITE, 0, 0, 20);
 }
 
 // hanging curve under the chin, used by chains & necklaces
@@ -146,141 +231,236 @@ function chinCurve(t) {
   return [30 + 60 * t, 96 + 11 * Math.sin(Math.PI * t)];
 }
 
+const GOLD_DK = '#C99A00';
+/* back(): drawn behind the head (collars, capes); front(): on top of the face. */
 const ACC = {
-  pierre() {
-    let s = '';
-    // beret, tilted to the left
-    s += `<g transform="rotate(-12 60 34)">`;
-    s += P('M31 40 C27 27 47 17 68 17 C89 17 98 28 90 37 C79 45 45 47 31 40 Z', RED, 3);
-    s += L('M37 37 C52 41 74 40 86 34', '#C8323A', 2.4);
-    s += L('M63 17 L64.5 10', INK, 3.4);
-    s += L('M40 27 Q48 21 58 20', '#FF8A8A', 2.4);
-    s += `</g>`;
-    // striped neckerchief
-    s += P('M34 99 Q60 109 86 99 L60 119 Z', RED, 3);
-    s += L('M42.5 104.8 Q60 110.4 77.5 104.8', WHITE, 2.4);
-    s += L('M50 110.3 Q60 113 70 110.3', WHITE, 2.4);
-    s += L('M56 115.3 L64 115.3', WHITE, 2.2);
-    s += C(60, 104.5, 4, RED, 2.5);
-    return s;
-  },
-  pupsalot() {
-    let s = '';
-    s += `<g transform="rotate(-7 60 38)">`;
-    s += P('M42.5 39 L40 8.5 Q60 3.5 80 8.5 L77.5 39 Z', '#4A4450', 3);
-    s += P('M42 30 L78 30 L77.4 38 L42.6 38 Z', '#FFB627', 2.5);
-    s += P('M26 40.5 Q60 29 94 40.5 Q60 49 26 40.5 Z', '#4A4450', 3);
-    s += L('M46 12 L47.5 27', '#6A6275', 2.6);
-    s += `</g>`;
-    // monocle on the right eye + chain
-    s += L('M92 71 Q97 84 94 94 Q92 101 97 108', INK, 4.4);
-    s += `<path d="M92 71 Q97 84 94 94 Q92 101 97 108" fill="none" stroke="${CHEESE}" stroke-width="2.2" stroke-dasharray="2.6 2.2" stroke-linecap="round"/>`;
-    s += C(EYE_R[0], EYE_R[1], 14.5, 'none', 6.4, INK);
-    s += C(EYE_R[0], EYE_R[1], 14.5, 'none', 3, CHEESE);
-    s += L('M70 52.5 Q75 50.5 80 50.6', '#FFF2B0', 1.6);
-    return s;
-  },
-  bruno() {
-    let s = '';
-    // tough-guy scar over the left eye
-    s += L('M31 44 L39 57', '#C9A6B4', 2.6);
-    s += L('M32.5 49.5 L37 48 M34.5 53 L39 51.5', '#C9A6B4', 1.8);
-    // chunky gold chain
-    const n = 9;
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      const [x, y] = chinCurve(t);
-      const a = Math.cos(Math.PI * t) * -20 + (i % 2 ? 90 : 0);
-      s += E(f1(x), f1(y), 4.4, 3.2, CHEESE, 2.2, INK, f1(a));
-      s += E(f1(x), f1(y), 1.8, 0.9, '#C99A00', 0, 0, f1(a));
+  pierre: {
+    back() {
+      // marinière: white shirt with navy stripes
+      let s = P('M22 99 Q60 114 98 99 L104 120 L16 120 Z', WHITE, 3);
+      s += L('M21.5 106.5 Q60 121 98.5 106.5', '#2B4BA8', 3.6);
+      s += L('M19.6 114 Q60 128 100.4 114', '#2B4BA8', 3.6);
+      return s;
+    },
+    front() {
+      let s = '';
+      // baguette tucked under the arm
+      s += `<g transform="rotate(-38 95 103)">`;
+      s += R(70, 96, 50, 14, 7, '#E9A64C', 3);
+      s += L('M79 99 L84 107 M89 99 L94 107 M99 99 L104 107 M109 99 L113 106', '#B9762E', 2.4);
+      s += L('M75 99.5 Q90 97.5 112 99', '#F7CE8A', 2);
+      s += `</g>`;
+      // pencil moustache with curly tips
+      s += both(L('M60 86 C55 89 47 89.5 40 86 C35 83.5 33 79 36 77 C38.5 75.8 40.5 78 39 80', INK, 3.6));
+      // huge beret, slouched to the left
+      s += `<g transform="rotate(-14 58 30)">`;
+      s += P('M15 36 C6 24 22 7 56 6 C89 5 107 15 103 29 C100 38 84 42 60 42 C38 42 21 42 15 36 Z', RED, 3);
+      s += L('M21 36.5 C42 44 82 43 99 32', '#C8323A', 3);
+      s += L('M27 21 Q39 12 55 11', '#FF9A9A', 3);
+      s += L('M58 6 Q57 2.5 60.5 1.5', INK, 3.6);
+      s += `</g>`;
+      return s;
     }
-    s += L('M60 107 L60 110', INK, 3);
-    s += C(60, 113, 6.5, TEAL, 2.6);
-    s += C(60, 113, 3, 'none', 1.8, CHEESE);
-    s += C(57.8, 110.8, 1.3, WHITE);
-    return s;
   },
-  mimi() {
-    let s = '';
-    // pearls
-    const n = 11;
-    for (let i = 0; i <= n; i++) {
-      const [x, y] = chinCurve(i / n);
-      s += C(f1(x), f1(y + 1), 3.3, WHITE, 1.8);
-      s += C(f1(x - 1), f1(y), 0.9, '#E6E0F0');
+  pupsalot: {
+    back() {
+      // stiff wing collar
+      return P('M38 99 L54 104 L46 114 Z', WHITE, 2.6) + P('M82 99 L66 104 L74 114 Z', WHITE, 2.6);
+    },
+    front() {
+      let s = '';
+      // black bow tie
+      s += P('M60 106 L46 99.5 Q43 106 46 112.5 Z', '#1E1B22', 3) + P('M60 106 L74 99.5 Q77 106 74 112.5 Z', '#1E1B22', 3);
+      s += E(60, 106, 4, 4.6, '#3A3542', 2.6);
+      // white handlebar moustache
+      s += both(P('M60 86 C55 83 46 83.5 39 87 C32 90.5 25 89 23 84 C21.5 80 24.5 76.5 28 78 C26 81 28 84.5 32 83.5 ' +
+        'C39 81.5 47 79.5 53 80.5 C57 81 59 83 60 84 Z', WHITE, 2.6));
+      // monocle on the right eye + chain
+      s += L('M92 72 Q98 85 95 95 Q93 102 99 109', INK, 4.4);
+      s += `<path d="M92 72 Q98 85 95 95 Q93 102 99 109" fill="none" stroke="${CHEESE}" stroke-width="2.2" stroke-dasharray="2.6 2.2" stroke-linecap="round"/>`;
+      s += C(EYE_R[0], EYE_R[1], 15, 'none', 7, INK);
+      s += C(EYE_R[0], EYE_R[1], 15, 'none', 3.6, '#FFB627');
+      s += L('M69.5 53 Q74.5 50 80 50', '#FFF2B0', 1.8);
+      // towering top hat
+      s += `<g transform="rotate(-8 60 36)">`;
+      s += P('M40 37 L37 5 Q60 0 83 5 L80 37 Z', '#1E1B22', 3);
+      s += P('M39.3 28 L80.7 28 L80 37 L40 37 Z', '#FFB627', 2.6);
+      s += P('M20 39 Q60 30 100 39 Q60 47.5 20 39 Z', '#1E1B22', 3);
+      s += L('M44 8.5 L46.5 24', '#5A5468', 3);
+      s += `</g>`;
+      return s;
     }
-    // big pink bow at the base of the left ear
-    s += `<g transform="rotate(-24 34 40)">`;
-    s += P('M34 40 C27 27 13 27 15 40 C13 53 27 53 34 40 Z', PINK, 3);
-    s += P('M34 40 C41 27 55 27 53 40 C55 53 41 53 34 40 Z', PINK, 3);
-    s += L('M20 36 Q24 33 28 36', '#FF9CC3', 2.2);
-    s += L('M39 36 Q43 33 47 36', '#FF9CC3', 2.2);
-    s += E(34, 40, 5, 6, '#E0306F', 2.6);
-    s += `</g>`;
-    return s;
   },
-  gaston() {
-    let s = '';
-    s += P('M40 41 L42 25 L78 25 L80 41 Q60 45 40 41 Z', WHITE, 3);
-    s += L('M50 28 L49.5 40 M60 28 L60 42 M70 28 L70.5 40', '#CFC8D8', 2);
-    s += puffs([[44, 21, 8.5], [55, 15, 9.5], [67, 15.5, 9.5], [77, 22, 8], [60, 23, 9]], WHITE, 3);
-    s += L('M47 15.5 Q50.5 10.5 55.5 10.5', '#E4DEEC', 2.2);
-    // small orange neckerchief
-    s += P('M42 100 Q60 107 78 100 L60 116 Z', ORANGE, 3);
-    s += C(60, 104, 3.8, ORANGE, 2.5);
-    s += L('M50 106 Q60 110 70 106', '#FFA66E', 2);
-    return s;
-  },
-  baron() {
-    let s = '';
-    s += `<g transform="rotate(9 60 36)">`;
-    s += P('M39 41 L36 15 L48.5 27 L60 10 L71.5 27 L84 15 L81 41 Q60 45 39 41 Z', CHEESE, 3);
-    s += P('M38.6 35 Q60 39 81.4 35', 'none', 2.4);
-    s += C(36, 14, 3.2, CHEESE, 2.4) + C(60, 9.5, 3.4, CHEESE, 2.4) + C(84, 14, 3.2, CHEESE, 2.4);
-    s += E(49, 39, 3.3, 2.5, PURPLE, 2) + E(60, 40, 4, 3, PURPLE, 2) + E(71, 39, 3.3, 2.5, PURPLE, 2);
-    s += C(58.8, 38.9, 1, WHITE);
-    s += L('M43 30 L42 22', '#FFF2B0', 2.2);
-    s += `</g>`;
-    return s;
-  },
-  coco() {
-    let s = '';
-    s += L('M26 59 L12 54', INK, 4) + L('M94 59 L108 54', INK, 4);
-    s += L('M50 58 Q60 52 70 58', INK, 4);
-    s += P(heartPath(40, 62, 16.5), SKY, 3.4);
-    s += P(heartPath(80, 62, 16.5), SKY, 3.4);
-    // glints
-    s += L('M28 57 Q30 51 36 50', WHITE, 3) + C(33, 61, 1.6, WHITE);
-    s += L('M68 57 Q70 51 76 50', WHITE, 3) + C(73, 61, 1.6, WHITE);
-    return s;
-  },
-  leia() {
-    // Prinzessinnen-Schnecken an beiden Kopfseiten + weißes Rebellen-Gewand
-    let s = '';
-    for (const [cx, dir] of [[13.5, 1], [106.5, -1]]) {
-      s += C(cx, 68, 11.5, '#6B3F24', 3);
-      s += L(`M${cx} 68 m${-3 * dir} 0 a3 3 0 1 ${dir > 0 ? 1 : 0} ${6 * dir} 0 a6 6 0 1 ${dir > 0 ? 1 : 0} ${-11 * dir} 1 a8.5 8.5 0 1 ${dir > 0 ? 1 : 0} ${15 * dir} -3`, '#A26A40', 2);
-      s += L(`M${cx - 6 * dir} 60.5 Q${cx} 57.5 ${cx + 6 * dir} 60.5`, '#C4895A', 1.8);
+  bruno: {
+    front() {
+      let s = '';
+      // underbite: jutting lower jaw with two fangs
+      s += P('M42 90 Q60 105 78 90 Q60 98 42 90 Z', '#4E3222', 2.8);
+      s += P('M47.5 93.2 L50 83.5 L54 94.6 Z', WHITE, 2.2) + P('M66 94.6 L70 83.5 L72.5 93.2 Z', WHITE, 2.2);
+      // tough-guy scar over the left eye
+      s += L('M27 42 L42 61', '#F0A8BC', 3);
+      s += L('M29.5 49 L35 46.5 M33 54 L38.5 51.5', '#F0A8BC', 2);
+      // massive gold chain + dollar medallion
+      const n = 8;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const [x, y] = chinCurve(t);
+        const a = Math.cos(Math.PI * t) * -20 + (i % 2 ? 90 : 0);
+        s += E(f1(x), f1(y + 1), 5.6, 4, CHEESE, 2.6, INK, f1(a));
+        s += E(f1(x), f1(y + 1), 2.4, 1.1, GOLD_DK, 0, 0, f1(a));
+      }
+      s += C(60, 111.5, 8.5, CHEESE, 3);
+      s += L('M63.5 107.5 Q60 105.5 57 107.5 Q55.5 110 60 111.5 Q64.5 113 63 115.5 Q60 117.5 56.5 115.5 M60 104.5 L60 118.5', GOLD_DK, 2.2);
+      // backwards-ish snapback, visor sideways to the left
+      s += `<g transform="rotate(-10 60 30)">`;
+      s += P('M33 44 Q14 37 3 43 Q6 52 33 50 Z', '#17988C', 3);
+      s += P('M26 45 C24 24 40 13 60 13 C80 13 96 24 94 45 Q60 37 26 45 Z', TEAL, 3);
+      s += L('M60 14 L60 39 M45 18 Q40 29 41.5 41.5 M75 18 Q80 29 78.5 41.5', '#17988C', 2.2);
+      s += L('M33 27 Q40 19 50 16.5', '#8BE8DF', 2.6);
+      s += C(60, 13, 3.2, TEAL, 2.4);
+      s += `</g>`;
+      return s;
     }
-    s += P('M31 99 Q60 110 89 99 L95 119 L25 119 Z', WHITE, 3);
-    s += L('M44 105 L41 119 M76 105 L79 119', '#D8D2E0', 2);
-    s += P('M52 106.5 Q60 108.5 68 106.5 L60 114 Z', '#E9E4F0', 2);
-    return s;
+  },
+  mimi: {
+    front() {
+      let s = '';
+      // pearls
+      const n = 10;
+      for (let i = 0; i <= n; i++) {
+        const [x, y] = chinCurve(i / n);
+        s += C(f1(x), f1(y + 2), 4, WHITE, 2);
+        s += C(f1(x - 1.2), f1(y + 0.8), 1.2, '#E6E0F0');
+      }
+      // beauty mark
+      s += C(87, 82, 1.9, INK);
+      // enormous polka-dot bow on top of the head
+      s += `<g transform="rotate(-8 60 22)">`;
+      s += P('M58 26 L47 44 L53 43 L55.5 48 L62 29 Z', '#E0306F', 2.6) + P('M62 26 L73 44 L67 43 L64.5 48 L58 29 Z', '#E0306F', 2.6);
+      s += both(P('M60 23 C51 6 27 0 21 13 C16 25 23 38 36 37 C46 36 55 31 60 23 Z', PINK, 3));
+      s += both(C(30, 15, 2.8, '#FFB3D1') + C(40, 27, 2.6, '#FFB3D1') + C(27, 28, 2.2, '#FFB3D1') + C(44, 14, 2, '#FFB3D1'));
+      s += both(L('M52 19 Q44 15 36 19', '#E0306F', 2.2));
+      s += E(60, 24, 7, 8.4, '#E0306F', 3);
+      s += L('M57.5 20 Q59 18.5 61 19', '#FF8FB8', 2);
+      s += `</g>`;
+      return s;
+    }
+  },
+  gaston: {
+    front() {
+      let s = '';
+      // orange neckerchief
+      s += P('M40 101 Q60 109 80 101 L60 118 Z', ORANGE, 3);
+      s += C(60, 105, 4.2, ORANGE, 2.6);
+      s += L('M49 107.5 Q60 111.5 71 107.5', '#FFA66E', 2.2);
+      // chunky curled moustache
+      s += both(P('M60 86 C56 82 49 81 43 83 C37 85 32.5 82 33.5 77.5 C34.5 73.5 40 73 40.5 77 C40.6 79 38.5 79.5 38 78 ' +
+        'C42 78 48 77.5 53 79 C57 80 59.5 82.5 60 84 Z', '#2A1810', 2.4));
+      // wooden spoon
+      s += `<g transform="rotate(32 100 98)">`;
+      s += R(97, 92, 6, 34, 3, '#D9A060', 2.6);
+      s += E(100, 82, 8, 11, '#D9A060', 3);
+      s += E(100, 82.5, 4.6, 7, '#B57A3C', 0);
+      s += `</g>`;
+      // towering chef's toque
+      s += P('M38 43 L40 24 L80 24 L82 43 Q60 47 38 43 Z', WHITE, 3);
+      s += L('M50 28 L49.5 41.5 M60 28 L60 43.5 M70 28 L70.5 41.5', '#CFC8D8', 2);
+      s += puffs([[40, 21, 9.5], [51, 13.5, 10.5], [69, 13.5, 10.5], [80, 21, 9.5], [60, 20, 10.5]], WHITE, 3);
+      s += L('M44 13 Q47 7 53 6', '#E4DEEC', 2.4);
+      return s;
+    }
+  },
+  baron: {
+    back() {
+      // royal purple cape
+      return P('M6 98 Q60 124 114 98 L118 120 L2 120 Z', PURPLE, 3);
+    },
+    front() {
+      let s = '';
+      // ermine collar under the jowls
+      s += P('M16 99 Q60 117 104 99 L108 108 Q60 130 12 108 Z', WHITE, 3);
+      for (const x of [22, 37, 52, 68, 83, 98]) {
+        const y = 106 + 11 * Math.sin(Math.PI * (x - 12) / 96);
+        s += P(`M${x} ${f1(y - 2.5)} q2 3 0 6 q-2 -3 0 -6 Z`, INK, 0);
+      }
+      // order star on the cape
+      s += P('M98 108 L100 112.5 L105 113 L101 116 L102.5 120 L98 117.6 L93.5 120 L95 116 L91 113 L96 112.5 Z', CHEESE, 2.2);
+      // oversized jewelled crown on purple velvet
+      s += `<g transform="rotate(-6 60 30)">`;
+      s += E(60, 27, 25, 14, '#5B3FD9', 3);
+      s += P('M32 42 L27 12 L44 26 L60 8 L76 26 L93 12 L88 42 Q60 48 32 42 Z', CHEESE, 3);
+      s += L('M31 35 Q60 40 89 35', GOLD_DK, 2.6);
+      s += C(27, 10.5, 3.8, CHEESE, 2.4) + C(60, 6.5, 4.2, CHEESE, 2.4) + C(93, 10.5, 3.8, CHEESE, 2.4);
+      s += E(44, 38, 3.6, 3.2, RED, 2.2) + E(60, 39.5, 4.8, 4.2, TEAL, 2.4) + E(76, 38, 3.6, 3.2, RED, 2.2);
+      s += C(58.6, 38.2, 1.3, WHITE);
+      s += E(60, 25, 3, 4, PINK, 2);
+      s += L('M35 30 L32.5 18', '#FFF2B0', 2.6);
+      s += `</g>`;
+      return s;
+    }
+  },
+  coco: {
+    front() {
+      let s = '';
+      // gold hoop earrings
+      s += both(C(11, 73, 7.5, 'none', 6, INK) + C(11, 73, 7.5, 'none', 3, CHEESE) + C(14.5, 63, 2.4, CHEESE, 2));
+      // giant heart sunglasses (tinted, the eyes still peek through)
+      s += L('M25 58 L11 52', INK, 4.2) + L('M95 58 L109 52', INK, 4.2);
+      s += L('M51 58 Q60 52 69 58', INK, 4.4);
+      for (const cx of [40, 80]) {
+        s += `<path d="${heartPath(cx, 63, 18)}" fill="${SKY}" fill-opacity="0.55" ${S(4)}/>`;
+        s += L(`M${cx - 13} ${57} Q${cx - 11} ${50} ${cx - 4} ${49}`, WHITE, 3) + C(cx - 7, 62, 1.7, WHITE);
+      }
+      // selfie phone
+      s += `<g transform="rotate(-16 20 104)">`;
+      s += R(8, 86, 23, 34, 5, '#1E8FC4', 3);
+      s += R(11.5, 91, 16, 22, 2.5, '#DFF4FF', 0);
+      s += P(heartPath(19.5, 101.5, 4.2), PINK, 1.8);
+      s += `</g>`;
+      return s;
+    }
+  },
+  leia: {
+    back() {
+      // white rebel robe
+      let s = P('M27 99 Q60 112 93 99 L100 120 L20 120 Z', WHITE, 3);
+      s += L('M43 106 L39 120 M77 106 L81 120', '#D8D2E0', 2.2);
+      return s;
+    },
+    front() {
+      let s = '';
+      const HAIR = '#6B3F24';
+      // hair parted in the middle, down to the buns
+      s += P('M60 33 C88 33 106 46 107 64 L97 64 C94 52 80 44.5 60 44.5 C40 44.5 26 52 23 64 L13 64 C14 46 32 33 60 33 Z', HAIR, 3);
+      s += L('M60 34.5 L60 44', '#4A2A16', 2.4);
+      s += both(L('M50 37 Q36 41 28 54', '#8E5833', 2.2));
+      // side-bun cinnamon rolls
+      for (const [cx, dir] of [[15, 1], [105, -1]]) {
+        s += C(cx, 67, 13, HAIR, 3);
+        s += L(`M${cx} 67 m${-3 * dir} 0 a3 3 0 1 ${dir > 0 ? 1 : 0} ${6 * dir} 0 a6.5 6.5 0 1 ${dir > 0 ? 1 : 0} ${-12 * dir} 1 a9.5 9.5 0 1 ${dir > 0 ? 1 : 0} ${17 * dir} -3`, '#A26A40', 2.2);
+      }
+      // collar of the robe + silver belt buckle peeking out
+      s += P('M51 105 Q60 108 69 105 L60 114 Z', '#E9E4F0', 2.2);
+      return s;
+    }
   }
 };
 
 function frenchieInner(dogId, opts) {
   opts = opts || {};
   const mood = opts.mood === 'guilty' || opts.mood === 'smug' ? opts.mood : 'normal';
-  let s = faceBase(mood, opts, dogId === 'bruno');
+  const lk = lookOf(dogId);
+  const acc = Object.prototype.hasOwnProperty.call(ACC, dogId) ? ACC[dogId] : null;
+  let s = acc && acc.back ? acc.back(mood, lk) : '';
+  s += faceBase(mood, opts, lk);
   if (opts.bowtie) {
     s += P('M60 104 L45 96 Q42 104 45 112 Z', PINK, 3);
     s += P('M60 104 L75 96 Q78 104 75 112 Z', PINK, 3);
     s += L('M48 100 L48 108 M72 100 L72 108', '#FF8FB8', 2);
     s += E(60, 104, 4.4, 5, '#E0306F', 2.6);
   }
-  const acc = Object.prototype.hasOwnProperty.call(ACC, dogId) ? ACC[dogId] : null;
-  if (acc) s += acc();
+  if (acc && acc.front) s += acc.front(mood, lk);
+  if (mood === 'guilty') s += sweatDrop();
   return s;
 }
 
@@ -289,244 +469,17 @@ function frenchie(dogId, opts) {
 }
 
 /* ------------------------------------------------------------------ */
-/* SNACKS (40x40)                                                      */
+/* SNACKS & OBJECTS live in js/art-props.js (registered as FD.artProps) */
 /* ------------------------------------------------------------------ */
-const SNACKS = {
-  kaese() {
-    let s = '';
-    s += stink('M12 13 Q9.5 10.5 12 8 Q14.5 5.5 12 3');
-    s += stink('M21 11.5 Q18.5 9 21 6.5 Q23.5 4 21 2.5');
-    // wedge: top face + front face
-    s += P('M4 24 L28 13 L37 20 L37 34 L4 34 Z', '#F4DE7A', 2.5);
-    s += P('M4 24 L28 13 L37 20 Z', '#FFEFA8', 2.5);
-    s += P('M4 24 L37 20 L37 34 L4 34 Z', '#F4DE7A', 2.5);
-    s += E(12, 29, 2.6, 2, '#D9B640') + E(22, 26, 1.9, 1.5, '#D9B640') + E(30, 30, 2.2, 1.7, '#D9B640');
-    s += E(27, 17, 1.8, 1, '#E6C95A');
-    s += L('M8 32 L33 32', '#E0C154', 1.5);
-    return s;
-  },
-  doener() {
-    let s = '';
-    s += L('M20 2 L20 38', '#8C8494', 2.6);
-    s += P('M11 8 L29 8 Q28 21 25 33 L15 33 Q12 21 11 8 Z', '#A0522D', 2.5);
-    s += L('M12.5 13 Q20 15.5 27.5 13 M13.5 19 Q20 21.5 26.5 19 M14.6 25 Q20 27.5 25.4 25', '#6E3418', 1.8);
-    s += L('M14 10.5 L14.5 16 M16 22 L16.4 27', '#D08450', 1.6);
-    s += E(20, 7, 11, 2.8, '#B9B2C2', 2.5);
-    s += E(20, 34.5, 7.5, 2.2, '#B9B2C2', 2.5);
-    s += C(20, 3, 2, '#B9B2C2', 2);
-    s += stink('M33 16 Q31 13.5 33 11 Q35 8.5 33 6', 1.8);
-    return s;
-  },
-  pansen() {
-    let s = '';
-    s += P('M6 29 C2 20 9 12 17 14 C24 9 36 14 34 23 C38 31 29 37 19 35 C13 37 8 34 6 29 Z', '#D8CBB0', 2.5);
-    const hex = (x, y) => `M${x - 3} ${y} L${x - 1.5} ${y - 2.6} L${x + 1.5} ${y - 2.6} L${x + 3} ${y} L${x + 1.5} ${y + 2.6} L${x - 1.5} ${y + 2.6} Z`;
-    let d = '';
-    [[12, 23], [18, 20], [24, 23], [30, 24], [15, 29], [21, 28], [27, 30]].forEach(([x, y]) => d += hex(x, y));
-    s += `<path d="${d}" fill="#C4B596" stroke="#9E8E6E" stroke-width="1.3" stroke-linejoin="round"/>`;
-    // fly with dotted path
-    s += `<path d="M22 13 Q24 5 30 8" fill="none" stroke="${INK}" stroke-width="1.2" stroke-dasharray="1.4 1.8" stroke-linecap="round"/>`;
-    s += E(30, 4.6, 2.6, 1.7, '#DDF3FF', 1.4, INK, -25) + E(34.3, 4.6, 2.6, 1.7, '#DDF3FF', 1.4, INK, 25);
-    s += C(32, 8, 2.6, INK);
-    s += C(33, 7.2, 0.8, '#FF4B4B');
-    s += stink('M7 16 Q5 13.5 7 11 Q9 8.5 7 6', 1.8);
-    return s;
-  },
-  rosenkohl() {
-    let s = '';
-    const sprout = (x, y, r, fill, dark) =>
-      C(x, y, r, fill, 2.5) +
-      L(`M${x - r * 0.7} ${y - r * 0.2} Q${x - r * 0.1} ${y + r * 0.3} ${x + r * 0.3} ${y + r * 0.95}`, dark, 1.8) +
-      L(`M${x + r * 0.75} ${y - r * 0.35} Q${x + r * 0.25} ${y + r * 0.1} ${x + r * 0.05} ${y + r * 0.9}`, dark, 1.8) +
-      L(`M${x - r * 0.35} ${y - r * 0.8} Q${x + r * 0.1} ${y - r * 0.2} ${x - r * 0.05} ${y + r * 0.4}`, dark, 1.6) +
-      E(x - r * 0.4, y - r * 0.45, r * 0.25, r * 0.15, '#C8F2A8', 0, 0, -35);
-    s += sprout(13, 25, 9, '#6CC24A', '#3E8E2A');
-    s += sprout(27, 27, 8.5, '#58B03A', '#337A22');
-    s += L('M13 16 L12 13.5', '#3E8E2A', 2.4);
-    s += stink('M20 12 Q17.5 9.5 20 7 Q22.5 4.5 20 2', 2);
-    s += stink('M30 14 Q28 12 30 10 Q32 8 30 6', 1.8);
-    return s;
-  },
-  bohnen() {
-    let s = '';
-    s += L('M12 12 Q9.5 9.5 12 7 Q14.5 4.5 12 2', '#B9B2C2', 2.4);
-    s += L('M28 12 Q25.5 9.5 28 7 Q30.5 4.5 28 2', '#B9B2C2', 2.4);
-    s += stink('M20 13 Q17.5 10.5 20 8 Q22.5 5.5 20 3', 2);
-    s += P('M5 21 Q20 13 35 21 Z', '#C0622F', 2.5);
-    [[11, 19, -20], [16.5, 17.2, 10], [22, 17, -8], [27.5, 18.5, 18], [14, 20.5, 30], [20, 20, 0], [25.5, 20.4, -25]]
-      .forEach(([x, y, r]) => { s += E(x, y, 2.6, 1.7, '#7A3A1E', 1.2, INK, r); });
-    s += P('M3.5 21 L36.5 21 Q35.5 35.5 20 35.5 Q4.5 35.5 3.5 21 Z', TEAL, 2.5);
-    s += L('M8 26 Q20 30 32 26', '#7FE3D8', 2);
-    return s;
-  }
-};
-
+const props = () => FD.artProps || { SNACKS: {}, OBJECTS: {} };
 function snack(key) {
-  const f = Object.prototype.hasOwnProperty.call(SNACKS, key) ? SNACKS[key] : null;
+  const T = props().SNACKS;
+  const f = Object.prototype.hasOwnProperty.call(T, key) ? T[key] : null;
   return svg('0 0 40 40', f ? f() : C(20, 20, 12, '#CCCCCC', 2.5));
 }
-
-/* ------------------------------------------------------------------ */
-/* FLOOR-PLAN OBJECTS (40x40)                                          */
-/* ------------------------------------------------------------------ */
-const W = 2.5; // stroke width for 40-box icons
-const OBJECTS = {
-  kissen() {
-    let s = '';
-    s += P('M6 8 Q20 12.5 34 8 Q29.5 20 34 32 Q20 27.5 6 32 Q10.5 20 6 8 Z', '#E0409A', W);
-    s += L('M11 12.5 Q20 15 29 12.5', '#F57BBE', 2);
-    s += L('M13 20 L27 20 M20 13 L20 27', '#B02A76', 1.4);
-    [[20, 20], [13.5, 15], [26.5, 15], [13.5, 25], [26.5, 25]].forEach(([x, y]) => { s += C(x, y, 1.6, '#8E1F5E'); });
-    [[6, 8], [34, 8], [34, 32], [6, 32]].forEach(([x, y]) => { s += C(x, y, 2.6, CHEESE, 1.8); });
-    return s;
-  },
-  teppich() {
-    let s = '';
-    let fr = '';
-    for (let x = 7; x <= 33; x += 3.25) fr += `M${f1(x)} 0.8 L${f1(x)} 4.5 M${f1(x)} 35.5 L${f1(x)} 39.2 `;
-    s += L(fr, '#C9B28A', 1.6);
-    s += R(4, 3.5, 32, 33, 2, ORANGE, W);
-    s += R(8, 7.5, 24, 25, 1, 'none', 2, CHEESE);
-    s += P('M20 11 L28 20 L20 29 L12 20 Z', '#E0521A', 2, '#9E3510');
-    s += P('M20 15.5 L24.5 20 L20 24.5 L15.5 20 Z', CHEESE, 1.6, '#9E3510');
-    s += C(11, 11, 1.4, CHEESE) + C(29, 11, 1.4, CHEESE) + C(11, 29, 1.4, CHEESE) + C(29, 29, 1.4, CHEESE);
-    return s;
-  },
-  sessel() {
-    let s = '';
-    s += L('M10 33 L9 37 M30 33 L31 37', INK, 2.8);
-    s += P('M9 23 Q8 6 20 6 Q32 6 31 23 Z', PURPLE, W);
-    s += L('M14 11 Q20 8.5 26 11', '#A796FF', 2);
-    s += P('M8 22 L32 22 L32 33 L8 33 Z', '#6A50E8', W);
-    s += R(3, 16, 8, 18, 3.5, PURPLE, W);
-    s += R(29, 16, 8, 18, 3.5, PURPLE, W);
-    s += L('M12 25.5 L28 25.5', '#A796FF', 1.8);
-    s += C(20, 15, 1.4, '#4A36B0');
-    return s;
-  },
-  korb() {
-    let s = '';
-    s += E(20, 18, 16, 8.5, '#8B5A2B', W);
-    s += E(20, 19.5, 12, 5.5, '#FF8FB8', 2);
-    s += L('M12 18.5 Q20 16 28 18.5', '#FFC0D8', 1.6);
-    s += P('M4 18 Q4 35 20 35 Q36 35 36 18 Q34 26 20 26 Q6 26 4 18 Z', '#C68642', W);
-    s += L('M8 26 L10 33 M14 28 L15 34.5 M20 28.6 L20 35 M26 28 L25 34.5 M32 26 L30 33', '#8B5A2B', 1.5);
-    s += L('M5.5 25 Q20 34 34.5 25', '#8B5A2B', 1.5);
-    return s;
-  },
-  regal() {
-    let s = '';
-    s += R(5, 3, 30, 34, 1.5, '#A0662F', W);
-    s += R(8, 6, 24, 12, 0, '#5C3A1A', 0) + R(8, 21, 24, 12.5, 0, '#5C3A1A', 0);
-    s += L('M5 19.5 L35 19.5', INK, 2.2);
-    const books = [[8.5, 7.5, 4, RED], [12.8, 9, 3.4, SKY], [16.6, 6.8, 4, CHEESE], [21, 8.5, 3.4, GAS], [24.8, 7.5, 3.2, PINK],
-                   [8.5, 23.5, 3.6, PURPLE], [12.5, 22, 4, ORANGE], [17, 24, 3.4, TEAL], [21, 22.5, 3.8, RED]];
-    books.forEach(([x, y, w, c]) => { s += R(x, y, w, (y < 19 ? 18 : 33.5) - y, 0.5, c, 1.3); });
-    s += P('M25.5 33.5 L31.5 26 L33.5 27.5 L28 33.5 Z', CHEESE, 1.3);
-    return s;
-  },
-  kuehlschrank() {
-    let s = '';
-    s += R(11, 3.5, 18, 33, 3, '#F4F2F8', W);
-    s += L('M11 15 L29 15', INK, 2.2);
-    s += L('M24.5 8 L24.5 12 M24.5 18.5 L24.5 25', INK, 2.6);
-    s += L('M14 6.5 L14 12.5', '#D8D4E2', 1.6);
-    s += L('M13 36.5 L13 38.5 M27 36.5 L27 38.5', INK, 2.2);
-    s += L('M6.5 12 L4.5 14 L6.5 16 L4.5 18', SKY, 1.8);
-    s += L('M33.5 20 L35.5 22 L33.5 24 L35.5 26', SKY, 1.8);
-    s += C(20, 29, 2, CHEESE, 1.4);
-    return s;
-  },
-  kamin() {
-    let s = '';
-    s += R(5, 9, 30, 28, 1, '#B8AFC4', W);
-    s += L('M5 16 L35 16 M5 23 L10 23 M30 23 L35 23 M5 30 L10 30 M30 30 L35 30 M20 9 L20 16', '#8A8196', 1.4);
-    s += R(2.5, 5, 35, 5, 1.5, '#8B5A2B', W);
-    s += P('M11 37 L11 25 Q11 17 20 17 Q29 17 29 25 L29 37 Z', '#2A1E24', W);
-    s += P('M14 35 Q12 28 17 23 Q17 27 19.5 27 Q18.5 21 23 18.5 Q22.5 24 26 28 Q27.5 32 26 35 Z', ORANGE, 1.8);
-    s += P('M17.5 35 Q16.5 30.5 19.5 28 Q20.5 30.5 22 30 Q24 32 23 35 Z', CHEESE, 0);
-    s += L('M13 35.5 L27 35.5', '#6E3418', 2.4);
-    return s;
-  },
-  tisch() {
-    let s = '';
-    s += L('M8.5 20 L7 36 M31.5 20 L33 36', INK, 5.2);
-    s += L('M8.5 20 L7 36 M31.5 20 L33 36', '#8B5A2B', 2.4);
-    s += L('M14 20 L14 30 M26 20 L26 30', '#6E4420', 2.4);
-    s += P('M3 13 L37 13 L37 20 L3 20 Z', '#B87333', W);
-    s += L('M6 16.3 L22 16.3 M26 16.3 L33 16.3', '#D9975A', 1.6);
-    return s;
-  },
-  uhr() {
-    let s = '';
-    s += P('M12 12 Q12 3 20 3 Q28 3 28 12 L28 37 L12 37 Z', '#9A5B2C', W);
-    s += C(20, 11.5, 5.8, '#FFF8E6', 2.2);
-    s += L('M20 11.5 L20 8 M20 11.5 L22.8 12.8', INK, 1.7);
-    s += R(15.5, 20, 9, 13, 1.5, '#5C3A1A', 2);
-    s += L('M20 21 L19 28', '#E0A800', 1.5);
-    s += C(19, 29.5, 2.4, CHEESE, 1.3);
-    s += L('M10.5 37 L29.5 37', INK, 3);
-    return s;
-  },
-  ruestung() {
-    let s = '';
-    s += L('M20 26 L20 35', INK, 3.2);
-    s += R(11, 34, 18, 4, 1.5, '#8B5A2B', 2.2);
-    s += P('M20 1.5 Q23 4 21.5 8 L18.5 8 Q15 4 20 1.5 Z', RED, 1.8);
-    s += P('M9 27 L9 16 Q9 6 20 6 Q31 6 31 16 L31 27 Q20 30 9 27 Z', '#C3C8D2', W);
-    s += L('M20 6.5 L20 28.5', '#8F95A3', 1.8);
-    s += R(11.5, 15.5, 17, 3.2, 1.2, INK, 0);
-    s += L('M14 21.5 L14 25.5 M17 22 L17 26.5 M23 22 L23 26.5 M26 21.5 L26 25.5', '#5A5F6C', 1.4);
-    s += L('M12.5 11 Q15 8.5 18 8.5', WHITE, 1.8);
-    return s;
-  },
-  pflanze() {
-    let s = '';
-    s += P('M20 24 Q10 18 7 8 Q16 9 20 22 Z', '#4CAF3A', 2.2);
-    s += P('M20 24 Q30 18 33 8 Q24 9 20 22 Z', '#4CAF3A', 2.2);
-    s += P('M20 24 Q15 12 20 2.5 Q25 12 20 24 Z', '#6CC24A', 2.2);
-    s += P('M20 25 Q9 25 4 18 Q13 16 20 24 Z', '#3E9A2E', 2.2);
-    s += P('M20 25 Q31 25 36 18 Q27 16 20 24 Z', '#3E9A2E', 2.2);
-    s += L('M20 6 L20 20 M11 11 L18 20 M29 11 L22 20', '#2E7A22', 1.2);
-    s += P('M10 24 L30 24 L27.5 37 L12.5 37 Z', '#D2691E', W);
-    s += R(8.5, 22.5, 23, 4.5, 1.5, '#E07B34', W);
-    return s;
-  },
-  fass() {
-    let s = '';
-    s += P('M10.5 4 L29.5 4 Q35 20 29.5 36 L10.5 36 Q5 20 10.5 4 Z', '#A0522D', W);
-    s += L('M15.5 4.5 Q13 20 15.5 35.5 M20 4.5 L20 35.5 M24.5 4.5 Q27 20 24.5 35.5', '#7A3B1E', 1.4);
-    s += L('M9.4 10 Q20 12 30.6 10 M9.4 30 Q20 32 30.6 30', '#4A4450', 3);
-    s += E(20, 4.2, 9.5, 2, '#C0703E', 2);
-    s += C(20, 20, 1.6, '#3A1E0E');
-    return s;
-  },
-  herd() {
-    let s = '';
-    s += R(4, 4, 32, 32, 3, '#ECE8F2', W);
-    [[13, 13, 5.5], [27, 13, 4.5], [13, 25.5, 4.5], [27, 25.5, 5.5]].forEach(([x, y, r]) => {
-      s += C(x, y, r, '#2A2530', 2) + C(x, y, r - 2.4, 'none', 1.4, RED);
-    });
-    s += R(4, 31, 32, 5, 1.5, '#C9C3D3', 2);
-    s += C(11, 33.5, 1.3, INK) + C(17, 33.5, 1.3, INK) + C(23, 33.5, 1.3, INK) + C(29, 33.5, 1.3, INK);
-    return s;
-  },
-  fluegel() {
-    let s = '';
-    // grand piano seen from above: keyboard at the bottom, curved tail at the top
-    s += P('M5 33 L5 8 Q5 3 11 3 Q19 3 21 11 Q23 18 31 20 Q36 22 36 28 L36 33 Z', '#221E24', W);
-    s += L('M8.5 29.5 L8.5 9 Q8.5 6 11.5 6 Q17 6 18.5 12.5 Q20.5 20.5 29.5 23', '#6A6270', 1.6);
-    s += L('M10 10 L30 27', '#8A8290', 1.2);
-    s += R(4, 31.5, 33, 6, 1, WHITE, 2.2);
-    let k = '';
-    for (let x = 8; x <= 33; x += 3) k += `M${x} 31.8 L${x} 35 `;
-    s += L(k, INK, 1.6);
-    return s;
-  }
-};
-
 function object(key) {
-  const f = Object.prototype.hasOwnProperty.call(OBJECTS, key) ? OBJECTS[key] : null;
+  const T = props().OBJECTS;
+  const f = Object.prototype.hasOwnProperty.call(T, key) ? T[key] : null;
   return svg('0 0 40 40', f ? f() : R(8, 8, 24, 24, 3, '#CCCCCC', 2.5));
 }
 
@@ -575,6 +528,7 @@ function logoMascot() {
   return svg('0 0 200 160', s);
 }
 
+const W = 2.5; // stroke width for 40-box icons
 function clothespin() {
   let s = '';
   s += `<g transform="rotate(38 20 20)">`;
@@ -590,7 +544,9 @@ function clothespin() {
 FD.art = {
   frenchie, snack, object, logoMascot, cloud, clothespin,
   DOG_IDS: ['pierre', 'pupsalot', 'bruno', 'mimi', 'gaston', 'baron', 'coco', 'leia'],
-  SNACK_KEYS: Object.keys(SNACKS),
-  OBJECT_KEYS: Object.keys(OBJECTS)
+  get SNACK_KEYS() { return Object.keys(props().SNACKS); },
+  get OBJECT_KEYS() { return Object.keys(props().OBJECTS); },
+  // shared drawing helpers for js/art-props.js
+  _h: { INK, PINK, CHEESE, GAS, GAS_HI, SKY, ORANGE, RED, TEAL, PURPLE, WHITE, svg, S, P, L, C, E, R, f1, puffs, heartPath, sparkle, stink }
 };
 })();

@@ -14,11 +14,12 @@ Im Schloss Le Pups gab es einen olfaktorischen Zwischenfall der Stufe 4. Ein Fre
 - „Nördlich von“ heißt irgendwo weiter oben, egal in welcher Spalte.
 - Der Täter war allein mit dem Snack: Im Raum des Snacks liegt genau ein Frenchie.
 
-Die Zeugenaussagen auf den Karten (Butler, Köchin, Labor-Bericht …) bestimmen die Aufstellung eindeutig.
+Die Zeugenaussagen auf den Karten (Butler, Köchin, Labor-Bericht …) bestimmen die Aufstellung eindeutig – und zwar so, dass man sie Schritt für Schritt ohne Raten herleiten kann. Wer feststeckt, kann sich den kompletten **Lösungsweg** zeigen lassen.
 
 ## Inhalt
 
 - 12 Fälle in vier Stufen: Leichter Mief, Dicke Luft, Grüne Wolke, Biologischer Ökodemozid (4×4 bis 8×8)
+- Lösungsweg wie bei Murdoku: jeder Schluss einzeln erklärt, mit Mini-Brett
 - Zufallsfall-Generator für endlosen Nachschub
 - Steckbriefe aller Verdächtigen und Snacks
 
@@ -28,16 +29,21 @@ Statische Seite ohne Build-Abhängigkeiten.
 
 ```bash
 npm start       # lokaler Server auf http://localhost:5173
-npm test        # prüft, dass jeder Fall genau eine Lösung hat
+npm test        # prüft: genau eine Lösung, Lösungsweg ohne Raten, Annahmen-Budget je Stufe
 npm run build   # dist/fartdoku.html (eine Datei zum Weitergeben)
 ```
 
 | Datei | Inhalt |
 |---|---|
 | `js/data.js` | Hunde, Räume, Möbel, Snacks, Zeugen, Schlosspläne, Fälle |
-| `js/engine.js` | Löser, Hinweis-Generator (garantiert eindeutige Lösung), Texte |
-| `js/art.js` | SVG-Grafiken: schwarzer Frenchie mit Accessoires, Möbel, Snacks, Logo |
+| `js/engine.js` | Löser, Hinweis-Generator, Logik-Löser für den Lösungsweg (`FD.solutionSteps`), Texte |
+| `js/art.js` | SVG-Grafiken: Frenchie-Karikaturen, Logo, Gaswolken |
+| `js/art-props.js` | SVG-Grafiken: Möbel und Snacks |
 | `js/app.js` | Oberfläche, Spielzustand, Fortschritt (localStorage) |
 | `css/style.css` | Stil |
 
 Neue Schlosspläne kommen in `FD.MAPS` (ein Buchstabe pro Feld für Räume und Möbel), neue Fälle in `FD.CASES`. Über `salt` lässt sich ein anderer Fall aus demselben Plan würfeln.
+
+### Eindeutig und ohne Raten
+
+Der Generator gibt sich nicht mit „genau eine Lösung“ zufrieden: Jeder Fall muss auch vom Logik-Löser in `js/engine.js` geknackt werden, der nur einzeln begründbare Schlüsse zieht (Aussage auswerten, Zeile/Spalte vergeben, Täter-Regel, k Figuren in k Zeilen …). Wie viele „Gedankenexperimente“ (Annahme → Widerspruch, eine Ebene tief) erlaubt sind, regelt `TRIAL_BUDGET`: Stufe 1–2 keine, Stufe 3 höchstens zwei, Stufe 4 höchstens fünf. Reicht das nicht, kommen gezielt Aussagen dazu.
