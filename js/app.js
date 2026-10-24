@@ -9,8 +9,11 @@
 
   var STORE = 'fartdoku:';
   var COLS = 'ABCDEFGH';
-  var MAX_HINTS = 3;
   var LEVEL_VAR = { 1: 'var(--gas)', 2: 'var(--sky)', 3: 'var(--orange)', 4: 'var(--pink)' };
+  var PAW_SVG = '<svg viewBox="0 0 40 40" width="100%" height="100%" aria-hidden="true"><g fill="currentColor">' +
+    '<ellipse cx="20" cy="27" rx="9" ry="7.5"/><ellipse cx="8.5" cy="17" rx="3.6" ry="4.6" transform="rotate(-18 8.5 17)"/>' +
+    '<ellipse cx="15.5" cy="10" rx="3.6" ry="4.8" transform="rotate(-6 15.5 10)"/><ellipse cx="24.5" cy="10" rx="3.6" ry="4.8" transform="rotate(6 24.5 10)"/>' +
+    '<ellipse cx="31.5" cy="17" rx="3.6" ry="4.6" transform="rotate(18 31.5 17)"/></g></svg>';
   var SNACK_SUB = 'Das Beweisstück – wurde vom Täter allein im Raum verputzt.';
 
   var MODES = ['note', 'place', 'mark'];
@@ -189,6 +192,9 @@
       '<li><b>Spürnase:</b> Die Notizfelder der gewählten Figur leuchten. Bleibt nur noch ein Feld übrig, zeigt ihr Chip ein „!“.</li>' +
       '<li><b>Modi:</b> „Setzen“ setzt schon beim Tippen, „×“ streicht Felder aus. Rechtsklick oder Shift-Klick setzt ebenfalls ein ×.</li>' +
       '<li><b>Tastatur:</b> Pfeiltasten bewegen, Leertaste = Notiz, Enter = Setzen, Entf = Entfernen, X wechselt den Modus, Strg+Z macht rückgängig.</li>' +
+      '<li><b>Lösungsweg:</b> Festgeschnüffelt? Der Lösungsweg erklärt den Fall Schritt für Schritt – mit Mini-Brett, Aussage und Begründung. ' +
+      'Blättern mit ‹ › (oder den Pfeiltasten), „Bis hier aufs Brett übernehmen“ legt den Stand als Figuren und Notizen auf dein Brett. ' +
+      'Wie weit du gespickt hast, steht am Ende in der Akte.</li>' +
       '</ul></div>';
   }
 
@@ -421,14 +427,16 @@
       place: fill(T, -1),
       marks: fill(n * n, false),
       notes: fill(n * n, 0),          // Bitmaske je Feld: Bit t = Notiz für Figur t
-      hinted: fill(T, false),
       struck: {},
       selected: 0,
       view: 0,                        // was der Spotlight zeigt: Figur-Index oder 'gen'
       mode: loadMode(),
       undo: [],
       elapsed: 0, running: false, t0: 0, tick: null,
-      hints: 0,
+      stepsMax: -1,                   // höchster angesehener Schritt im Lösungsweg (-1 = nie geöffnet)
+      stepsTotal: 0,
+      solData: null,                  // FD.solutionSteps(), erst beim ersten Öffnen berechnet
+      solIdx: 0,
       solved: false,
       focus: 0,
       clearArmed: null,
@@ -478,10 +486,14 @@
       var mask = (1 << G.place.length) - 1;
       G.notes = pr.notes.map(function (v, i) { return G.cells[i].blocked ? 0 : ((+v | 0) & mask); });
     }
-    if (Array.isArray(pr.hinted) && pr.hinted.length === G.hinted.length) G.hinted = pr.hinted.map(Boolean);
     if (pr.struck && typeof pr.struck === 'object') G.struck = pr.struck;
     G.elapsed = Math.max(0, +pr.elapsed || 0);
-    G.hints = Math.min(MAX_HINTS, Math.max(0, +pr.hints || 0));
+    // Alte Spielstände mit Tipps (hints/hinted) laden einfach ohne – die Felder werden ignoriert.
+    if (typeof pr.steps === 'number' && pr.steps >= 0) {
+      G.stepsMax = Math.floor(pr.steps);
+      G.stepsTotal = Math.max(0, +pr.stepsN || 0);
+      G.solIdx = G.stepsMax;
+    }
   }
 
   function saveProgress() {
@@ -489,8 +501,8 @@
     var marks = [];
     G.marks.forEach(function (m, i) { if (m) marks.push(i); });
     save('progress:' + G.key, {
-      v: 2, place: G.place, marks: marks, notes: G.notes, hinted: G.hinted, struck: G.struck,
-      elapsed: elapsedNow(), hints: G.hints
+      v: 3, place: G.place, marks: marks, notes: G.notes, struck: G.struck,
+      elapsed: elapsedNow(), steps: G.stepsMax, stepsN: G.stepsTotal
     });
   }
 
@@ -500,6 +512,7 @@
       document.removeEventListener('pointerdown', dismissCoach, true);
       document.removeEventListener('keydown', dismissCoach, true);
     }
+    closeSol(true);
     pauseTimer();
     saveProgress();
     clearTimeout(G.clearArmed);
@@ -602,15 +615,8 @@
     h += '<section class="board-col" aria-label="Tatort">';
     h += '<div class="board-frame' + (n <= 6 ? ' fit' : '') + '" style="--n:' + n + ';--nc:' + nc + ';--nr:' + Math.ceil(T / nc) + '">' +
       '<div class="compass" aria-hidden="true"><span class="compass-arrow">▲</span>N</div>' +
-      '<div class="board-grid">' +
-      '<span class="corner" aria-hidden="true"><span class="mini-compass"><span class="compass-arrow">▲</span>N</span></span>' +
-      '<div class="col-labels" aria-hidden="true">';
-    for (var c = 0; c < n; c++) h += '<span>' + COLS[c] + '</span>';
-    h += '</div><div class="row-labels" aria-hidden="true">';
-    for (var r = 0; r < n; r++) h += '<span>' + (r + 1) + '</span>';
-    h += '</div>';
-    h += '<div class="board" role="group" aria-label="Spielbrett ' + n + ' mal ' + n + '">' + boardCellsHTML() + '</div>';
-    h += '</div><div class="board-fx" aria-hidden="true"></div></div>';
+      gridHTML('class="board" role="group" aria-label="Spielbrett ' + n + ' mal ' + n + '"', boardCellsHTML()) +
+      '<div class="board-fx" aria-hidden="true"></div></div>';
 
     // Figurenleiste + Spotlight (auf dem Handy als Bottom-Sheet)
     var hasGen = G.groups.general.length > 0;
@@ -645,8 +651,8 @@
       '</div>' +
       '<div class="tool-row">' +
       '<button type="button" class="btn btn-undo" data-action="undo" aria-label="Rückgängig" title="Rückgängig (Strg+Z)"><span aria-hidden="true">↶</span></button>' +
-      '<button type="button" class="btn btn-hint" data-action="hint"><span>Tipp</span><span class="pins" aria-hidden="true">' +
-      pinHTML() + pinHTML() + pinHTML() + '</span></button>' +
+      '<button type="button" class="btn btn-steps" data-action="steps" aria-haspopup="dialog">' +
+      '<span class="steps-ico" aria-hidden="true">' + PAW_SVG + '</span><span class="steps-lbl">Lösungsweg</span></button>' +
       '<button type="button" class="btn btn-clear" data-action="clear">Leeren</button>' +
       '<button type="button" class="btn btn-primary btn-solve" data-action="solve"></button>' +
       '</div></div>' +
@@ -686,8 +692,7 @@
       spot: root.querySelector('.spot'),
       modeBtns: Array.prototype.slice.call(root.querySelectorAll('[data-mode]')),
       undo: root.querySelector('[data-action="undo"]'),
-      hint: root.querySelector('[data-action="hint"]'),
-      pins: Array.prototype.slice.call(root.querySelectorAll('.pins .pin')),
+      steps: root.querySelector('[data-action="steps"]'),
       clear: root.querySelector('[data-action="clear"]'),
       solve: root.querySelector('[data-action="solve"]'),
       status: root.querySelector('.status'),
@@ -710,38 +715,52 @@
     watchSheet();
   }
 
-  function pinHTML() { return '<span class="pin">' + art('clothespin') + '</span>'; }
+  /* Wände, Raumfarbe, Raumname und Möbel eines Felds – fürs Spielbrett und das Mini-Brett im Lösungsweg. */
+  function cellBase(cell, seenRoom) {
+    var n = G.n, cells = G.cells, r = cell.r, c = cell.c;
+    var cls = ['cell'];
+    var same = function (rr, cc) { return rr >= 0 && rr < n && cc >= 0 && cc < n && cells[rr * n + cc].room === cell.room; };
+    if (r > 0 && !same(r - 1, c)) cls.push('w-t');
+    if (c < n - 1 && !same(r, c + 1)) cls.push('w-r');
+    if (r < n - 1 && !same(r + 1, c)) cls.push('w-b');
+    if (c > 0 && !same(r, c - 1)) cls.push('w-l');
+    if (c === n - 1) cls.push('e-r');
+    if (r === n - 1) cls.push('e-b');
+    var o = cell.obj ? FD.OBJECTS[cell.obj] : null;
+    if (cell.blocked) cls.push('is-blocked');
+    else if (o) cls.push('has-seat');
+    var inner = '';
+    if (!seenRoom[cell.room]) {
+      seenRoom[cell.room] = true;
+      var span = 1;
+      while (c + span < n && same(r, c + span)) span++;
+      inner += '<span class="c-label" style="--span:' + span + '" aria-hidden="true">' + esc(roomName(cell.room)) + '</span>';
+    }
+    if (o) inner += '<span class="c-obj" aria-hidden="true">' + art('object', cell.obj) + '</span>';
+    return { cls: cls, inner: inner, style: '--room:' + esc((FD.ROOMS[cell.room] || {}).color || '#eee') };
+  }
 
   function boardCellsHTML() {
-    var n = G.n, cells = G.cells;
     var seenRoom = {};
     var h = '';
-    cells.forEach(function (cell) {
-      var i = cell.i, r = cell.r, c = cell.c;
-      var cls = ['cell'];
-      var same = function (rr, cc) { return rr >= 0 && rr < n && cc >= 0 && cc < n && cells[rr * n + cc].room === cell.room; };
-      if (r > 0 && !same(r - 1, c)) cls.push('w-t');
-      if (c < n - 1 && !same(r, c + 1)) cls.push('w-r');
-      if (r < n - 1 && !same(r + 1, c)) cls.push('w-b');
-      if (c > 0 && !same(r, c - 1)) cls.push('w-l');
-      if (c === n - 1) cls.push('e-r');
-      if (r === n - 1) cls.push('e-b');
-      var o = cell.obj ? FD.OBJECTS[cell.obj] : null;
-      if (cell.blocked) cls.push('is-blocked');
-      else if (o) cls.push('has-seat');
-      var inner = '';
-      if (!seenRoom[cell.room]) {
-        seenRoom[cell.room] = true;
-        var span = 1;
-        while (c + span < n && same(r, c + span)) span++;
-        inner += '<span class="c-label" style="--span:' + span + '" aria-hidden="true">' + esc(roomName(cell.room)) + '</span>';
-      }
-      if (o) inner += '<span class="c-obj" aria-hidden="true">' + art('object', cell.obj) + '</span>';
-      inner += '<span class="c-x" aria-hidden="true">×</span><span class="c-notes" aria-hidden="true"></span><span class="c-tok"></span>';
-      h += '<button type="button" class="' + cls.join(' ') + '" data-i="' + i + '" tabindex="-1" style="--room:' +
-        esc((FD.ROOMS[cell.room] || {}).color || '#eee') + '"' + (cell.blocked ? ' aria-disabled="true"' : '') + '>' + inner + '</button>';
+    G.cells.forEach(function (cell) {
+      var b = cellBase(cell, seenRoom);
+      var inner = b.inner + '<span class="c-x" aria-hidden="true">×</span><span class="c-notes" aria-hidden="true"></span><span class="c-tok"></span>';
+      h += '<button type="button" class="' + b.cls.join(' ') + '" data-i="' + cell.i + '" tabindex="-1" style="' + b.style + '"' +
+        (cell.blocked ? ' aria-disabled="true"' : '') + '>' + inner + '</button>';
     });
     return h;
+  }
+
+  /* Spalten-/Reihenbeschriftung + Brett, wie im Spiel (auch fürs Mini-Brett). */
+  function gridHTML(boardAttrs, cellsHtml) {
+    var n = G.n, h = '<div class="board-grid">' +
+      '<span class="corner" aria-hidden="true"><span class="mini-compass"><span class="compass-arrow">▲</span>N</span></span>' +
+      '<div class="col-labels" aria-hidden="true">';
+    for (var c = 0; c < n; c++) h += '<span>' + COLS[c] + '</span>';
+    h += '</div><div class="row-labels" aria-hidden="true">';
+    for (var r = 0; r < n; r++) h += '<span>' + (r + 1) + '</span>';
+    return h + '</div><div ' + boardAttrs + '>' + cellsHtml + '</div></div>';
   }
 
   function dossierHTML() {
@@ -1039,13 +1058,12 @@
       }
 
       var slot = G.els.tokBoxes[i];
-      var sig = t < 0 ? -1 : t * 2 + (G.hinted[t] ? 1 : 0);
+      var sig = t;
       if (G.prevOcc[i] !== sig) {
         if (t < 0) slot.innerHTML = '';
         else {
           slot.innerHTML = '<span class="token ' + (G.p.tokens[t].kind === 'snack' ? 'is-snack' : 'is-dog') + '" style="--tc:' + tokenColor(t) + '">' +
-            '<span class="token-art">' + tokenArt(t) + '</span></span>' +
-            (G.hinted[t] ? '<span class="hint-badge" title="Per Tipp gesetzt">' + art('clothespin') + '</span>' : '');
+            '<span class="token-art">' + tokenArt(t) + '</span></span>';
         }
         G.prevOcc[i] = sig;
       }
@@ -1120,10 +1138,8 @@
     MODES.forEach(function (m) { G.els.game.classList.toggle('mode-' + m, G.mode === m); });
 
     G.els.undo.disabled = !G.undo.length || G.solved;
-    var left = MAX_HINTS - G.hints;
-    G.els.hint.disabled = left <= 0 || G.solved;
-    G.els.hint.setAttribute('aria-label', 'Tipp – noch ' + left + ' von ' + MAX_HINTS);
-    G.els.pins.forEach(function (pin, k) { pin.classList.toggle('used', k >= left); });
+    G.els.steps.classList.toggle('is-used', G.stepsMax >= 0);
+    G.els.steps.setAttribute('aria-label', 'Lösungsweg anzeigen' + (G.stepsMax >= 0 ? ' (schon gespickt)' : ''));
     G.els.clear.disabled = G.solved || (placedCount === 0 && !G.marks.some(Boolean) && !G.notes.some(Boolean));
     G.els.solve.disabled = !all || G.solved;
     G.els.solve.innerHTML = G.solved ? 'Gelöst!' : '<span class="lbl-long">Fall </span>lösen';
@@ -1142,10 +1158,10 @@
   /* ---------- Aktionen ---------- */
 
   function snapshot() {
-    return { place: G.place.slice(), marks: G.marks.slice(), notes: G.notes.slice(), hinted: G.hinted.slice(), selected: G.selected };
+    return { place: G.place.slice(), marks: G.marks.slice(), notes: G.notes.slice(), selected: G.selected };
   }
   function restoreSnap(s) {
-    G.place = s.place; G.marks = s.marks; G.hinted = s.hinted; G.selected = s.selected;
+    G.place = s.place; G.marks = s.marks; G.selected = s.selected;
     if (s.notes) G.notes = s.notes;
     if (G.selected >= 0) G.view = G.selected;
   }
@@ -1248,9 +1264,8 @@
     if (!opts.noUndo) pushUndo();
     var occ = G.place.indexOf(i);
     var bumped = occ >= 0 && occ !== t ? occ : -1;
-    if (bumped >= 0) { G.place[bumped] = -1; G.hinted[bumped] = false; }
+    if (bumped >= 0) G.place[bumped] = -1;
     G.place[t] = i;
-    G.hinted[t] = !!opts.hint;
     G.marks[i] = false;
     cleanupNotes(t, i);
     G.selected = nextUnplaced(t);
@@ -1270,7 +1285,6 @@
     if (i < 0) return;
     pushUndo();
     G.place[t] = -1;
-    G.hinted[t] = false;
     G.selected = t;
     G.view = t;
     updateAll();
@@ -1326,36 +1340,6 @@
     if (!silent) announce(m === 'note' ? 'Modus Notiz.' : m === 'place' ? 'Modus Setzen.' : 'Modus Kreuz.');
   }
 
-  function useHint() {
-    if (!G || G.solved) return;
-    if (G.hints >= MAX_HINTS) { toast('Keine Wäscheklammern mehr. Ab jetzt nur noch Nase.'); return; }
-    var sol = G.p.solution;
-    var wrong = -1;
-    for (var t = 0; t < G.place.length; t++) {
-      if (G.place[t] >= 0 && G.place[t] !== sol[t]) { wrong = t; break; }
-    }
-    if (wrong >= 0) {
-      pushUndo();
-      G.place[wrong] = -1;
-      G.hinted[wrong] = false;
-      G.selected = wrong;
-      G.view = wrong;
-      G.hints++;
-      updateAll();
-      toast(tokenName(wrong) + ' stand falsch – zurück auf die Hand.', 'hint');
-      return;
-    }
-    var u = nextUnplaced(-1);
-    if (u < 0) { toast('Alles richtig platziert – jetzt „Fall lösen“ drücken!', 'good'); return; }
-    pushUndo();
-    var target = sol[u];
-    var other = G.place.indexOf(target);
-    if (other >= 0) G.place[other] = -1; // sollte nie passieren, sicher ist sicher
-    G.hints++;
-    placeToken(u, target, { noUndo: true, hint: true, fx: true });
-    toast('Tipp: ' + tokenName(u) + ' gehört nach ' + cellName(target) + '.', 'hint');
-  }
-
   function armClear() {
     if (!G || G.solved) return;
     var btn = G.els.clear;
@@ -1369,7 +1353,6 @@
       G.place = fill(G.place.length, -1);
       G.marks = fill(G.marks.length, false);
       G.notes = fill(G.notes.length, 0);
-      G.hinted = fill(G.hinted.length, false);
       G.selected = 0;
       G.view = 0;
       updateAll();
@@ -1406,11 +1389,12 @@
     pauseTimer();
     endPress(true);
     G.solved = true;
+    closeSol(true);
     var time = G.elapsed;
     if (G.key) {
       var all = getSolved();
       var prev = all[G.key];
-      if (!prev || time < prev.time) all[G.key] = { time: time, hints: G.hints, at: Date.now() };
+      if (!prev || time < prev.time) all[G.key] = { time: time, steps: G.stepsMax + 1, at: Date.now() };
       save('solved', all);
       drop('progress:' + G.key);
     }
@@ -1418,6 +1402,366 @@
     updateBoard();
     updateSide();
     showReveal(time);
+  }
+
+  /* ---------- Lösungsweg (Schritt für Schritt, wie bei Murdoku) ---------- */
+
+  var SOL_KIND = {
+    start: 'Ausgangslage', clue: 'Aussage', place: 'Gesetzt', line: 'Reihe & Spalte', hidden: 'Letzter Platz',
+    pair: 'Paar', room: 'Raum', culprit: 'Täter', trial: 'Gedankenexperiment', final: 'Urteil'
+  };
+
+  function computeSol() {
+    if (G.solData) return G.solData;
+    var res = null;
+    try {
+      if (typeof FD.solutionSteps === 'function') res = FD.solutionSteps(G.p);
+    } catch (e) {
+      if (window.console) console.error('Lösungsweg fehlgeschlagen', e);
+    }
+    if (res && Array.isArray(res.steps) && res.steps.length) {
+      G.solData = res;
+      G.stepsTotal = res.steps.length;
+      G.solIdx = Math.max(0, Math.min(G.solIdx, res.steps.length - 1));
+    }
+    return G.solData;
+  }
+
+  function openSol() {
+    if (!G) return;
+    if (G.solEl) { focusSol(); return; }
+    dismissCoach();
+    endPress(true);
+    var el = document.createElement('div');
+    el.className = 'sol';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-labelledby', 'sol-title');
+    el.innerHTML = '<div class="sol-tint" data-sol="close"></div>' +
+      '<section class="sol-panel">' +
+      '<div class="sol-head">' +
+      '<span class="sol-head-ico" aria-hidden="true">' + PAW_SVG + '</span>' +
+      '<h2 id="sol-title" class="sol-title">Lösungsweg</h2>' +
+      '<span class="sol-count" aria-live="polite"></span>' +
+      '<button type="button" class="btn btn-icon sol-close" data-sol="close" aria-label="Lösungsweg schließen">×</button>' +
+      '</div>' +
+      '<div class="sol-progress" aria-hidden="true"><span></span></div>' +
+      '<div class="sol-body"></div>' +
+      '<div class="sol-foot"></div>' +
+      '</section>';
+    document.body.appendChild(el);
+    document.body.classList.add('has-sol');
+    G.solEl = el;
+    G.solDir = 0;
+    el.addEventListener('click', onSolClick);
+    el.querySelector('.sol-body').addEventListener('pointerdown', onSolSwipe);
+    G.els.steps.setAttribute('aria-expanded', 'true');
+    if (G.stepsMax < 0 && !G.solved) renderSolConfirm();
+    else showSolSteps();
+  }
+
+  function closeSol(silent) {
+    if (!G || !G.solEl) return;
+    var el = G.solEl;
+    G.solEl = null;
+    if (el.parentNode) el.parentNode.removeChild(el);
+    document.body.classList.remove('has-sol');
+    if (G.els.steps) {
+      G.els.steps.setAttribute('aria-expanded', 'false');
+      if (!silent) G.els.steps.focus({ preventScroll: true });
+    }
+  }
+
+  function focusSol() {
+    if (!G || !G.solEl) return;
+    var b = G.solEl.querySelector('[data-sol="yes"]') || G.solEl.querySelector('[data-sol="next"]:not(:disabled)') ||
+      G.solEl.querySelector('[data-sol="prev"]:not(:disabled)') || G.solEl.querySelector('.sol-close');
+    if (b) b.focus({ preventScroll: true });
+  }
+
+  function solParts() {
+    var el = G.solEl;
+    return { count: el.querySelector('.sol-count'), bar: el.querySelector('.sol-progress span'), body: el.querySelector('.sol-body'), foot: el.querySelector('.sol-foot') };
+  }
+
+  function renderSolConfirm() {
+    var P = solParts();
+    G.solEl.classList.add('is-confirm');
+    P.count.textContent = '';
+    P.bar.style.width = '0%';
+    P.body.innerHTML = '<div class="sol-confirm">' +
+      '<span class="sol-confirm-dog" aria-hidden="true">' + art('frenchie', (G.p.tokens[0] || {}).id || 'bruno', { mood: 'smug' }) + '</span>' +
+      '<p class="sol-confirm-q">Willst du wirklich spicken?</p>' +
+      '<p class="sol-confirm-t">Der Lösungsweg zeigt Schritt für Schritt, wie man den Fall knackt – Aussage für Aussage, bis zum Täter. ' +
+      'Du entscheidest, wie weit du schnüffelst. Wie viele Schritte du angesehen hast, steht am Ende in der Akte.</p></div>';
+    P.foot.innerHTML = '<div class="sol-confirm-actions">' +
+      '<button type="button" class="btn" data-sol="close">Nee, ich riech das selbst</button>' +
+      '<button type="button" class="btn btn-primary" data-sol="yes">Ja, zeig her</button></div>';
+    focusSol();
+  }
+
+  function showSolSteps() {
+    if (!G || !G.solEl) return;
+    G.solEl.classList.remove('is-confirm');
+    if (G.solData) { renderSolStep(); focusSol(); return; }
+    var P = solParts();
+    P.count.textContent = '';
+    P.body.innerHTML = '<div class="sol-loading" aria-busy="true"><span class="sol-loading-cloud" aria-hidden="true">' + art('cloud', 1) + '</span>' +
+      '<p>Ermittle den Tathergang … die Spürnasen schnüffeln schon.</p></div>';
+    P.foot.innerHTML = '';
+    var el = G.solEl;
+    setTimeout(function () {
+      if (!G || G.solEl !== el) return;
+      if (!computeSol()) {
+        P.body.innerHTML = '<div class="sol-loading"><p>Der Lösungsweg ist im Nebel verschwunden. Irgendwas stinkt hier – bitte später nochmal versuchen.</p></div>';
+        P.foot.innerHTML = '<div class="sol-confirm-actions"><button type="button" class="btn" data-sol="close">Schließen</button></div>';
+        focusSol();
+        return;
+      }
+      renderSolStep();
+      focusSol();
+    }, 30);
+  }
+
+  function solStep(k) { return G.solData.steps[k]; }
+
+  function renderSolStep() {
+    var data = G.solData, steps = data.steps, N = steps.length;
+    var k = Math.max(0, Math.min(G.solIdx, N - 1));
+    G.solIdx = k;
+    if (k > G.stepsMax && !G.solved) { G.stepsMax = k; saveProgress(); updateSide(); }
+    var st = solStep(k);
+    var P = solParts();
+    P.count.textContent = 'Schritt ' + (k + 1) + ' von ' + N;
+    P.bar.style.width = ((k + 1) / N * 100).toFixed(1) + '%';
+
+    var h = '<article class="sol-step' + (G.solDir > 0 ? ' slide-next' : G.solDir < 0 ? ' slide-prev' : '') + '" data-kind="' + esc(st.kind) + '">';
+    h += '<div class="sol-step-head"><span class="sol-kind">' + esc(SOL_KIND[st.kind] || 'Schritt') + '</span>' + solWhoHTML(st) + '</div>' +
+      '<h3 class="sol-step-title">' + esc(st.title) + '</h3>';
+    var nc = noteCols(), S = solState(st, k > 0 ? steps[k - 1] : null);
+    h += '<div class="sol-board-wrap" style="--n:' + G.n + ';--nc:' + nc + ';--nr:' + Math.ceil(G.place.length / nc) + '">' +
+      gridHTML('class="board sol-board' + (solHasHL(st) ? ' has-hl' : '') + '" role="img" aria-label="' + esc(solBoardLabel(S, st)) + '"', solCellsHTML(S, st)) +
+      '</div>' + solLegendHTML(S, st);
+    var cl = st.clue != null ? G.p.clues[st.clue] : null;
+    if (cl) {
+      h += '<blockquote class="sol-clue"><span class="clue-text">' + esc(cl.text) + '</span>' +
+        '<span class="clue-by">— ' + esc(cl.witness || 'Anonym') + '</span></blockquote>';
+    }
+    h += '<div class="sol-text">' + String(st.text || '').split(/\n+/).map(function (line) { return '<p>' + esc(line) + '</p>'; }).join('') + '</div>';
+    if (st.kind === 'final' && data.solved === false) {
+      h += '<p class="sol-note">Hier kommt auch die Spürnase nicht weiter – der Rest braucht Fantasie.</p>';
+    }
+    h += '</article>';
+    P.body.innerHTML = h;
+    if (G.solDir) P.body.scrollTop = 0;
+    G.solDir = 0;
+
+    P.foot.innerHTML = '<div class="sol-nav">' +
+      '<button type="button" class="btn sol-prev" data-sol="prev"' + (k === 0 ? ' disabled' : '') + ' aria-label="Vorheriger Schritt" title="Vorheriger Schritt (←)">' +
+      '<span aria-hidden="true">‹</span><span class="sol-nav-lbl" aria-hidden="true">Zurück</span></button>' +
+      '<button type="button" class="btn sol-apply" data-sol="apply"' + (G.solved ? ' disabled' : '') + '>Bis hier aufs Brett übernehmen</button>' +
+      '<button type="button" class="btn btn-primary sol-next" data-sol="next"' + (k === N - 1 ? ' disabled' : '') + ' aria-label="Nächster Schritt" title="Nächster Schritt (→)">' +
+      '<span class="sol-nav-lbl" aria-hidden="true">Weiter</span><span aria-hidden="true">›</span></button>' +
+      '</div>';
+  }
+
+  function solWhoHTML(st) {
+    var h = '';
+    (st.focus || []).slice(0, 4).forEach(function (t) {
+      if (t < 0 || t >= G.place.length) return;
+      var guilty = st.kind === 'final' && t === G.p.culprit;
+      h += '<span class="sol-who' + (G.p.tokens[t].kind === 'snack' ? ' is-snack' : '') + '" style="--tc:' + tokenColor(t) + '">' +
+        '<span class="sol-who-art" aria-hidden="true">' + tokenArt(t, guilty ? 'guilty' : 'normal') + '</span>' +
+        '<span class="sol-who-name">' + esc(tokenName(t)) + '</span></span>';
+    });
+    return h ? '<span class="sol-whos">' + h + '</span>' : '';
+  }
+
+  function solHasHL(st) {
+    return !!((st.rows && st.rows.length) || (st.cols && st.cols.length) || (st.rooms && st.rooms.length));
+  }
+
+  /* Zustand eines Schritts fürs Mini-Brett: gesetzte Figuren, Kandidaten, gestrichene Felder. */
+  function solState(st, prev) {
+    var N = G.n * G.n, T = G.place.length;
+    var fixed = fill(N, -1), masks = fill(N, 0), elim = fill(N, 0), fresh = {}, focus = 0;
+    (st.cand || []).forEach(function (cs, t) { if (cs && cs.length === 1) fixed[cs[0]] = t; });
+    (st.cand || []).forEach(function (cs, t) {
+      if (!cs || cs.length === 1) return;
+      cs.forEach(function (i) { if (i >= 0 && i < N) masks[i] |= 1 << t; });
+    });
+    (st.elim || []).forEach(function (e) {
+      if (!(e.t >= 0 && e.t < T)) return;
+      (e.cells || []).forEach(function (i) { if (i >= 0 && i < N) elim[i] |= 1 << e.t; });
+    });
+    (st.place || []).forEach(function (pl) { fresh[pl.cell] = true; });
+    // Auch wer in diesem Schritt auf ein einziges Feld geschrumpft ist, gilt als frisch gesetzt.
+    if (prev && prev.cand) {
+      (st.cand || []).forEach(function (cs, t) {
+        var was = prev.cand[t];
+        if (cs && cs.length === 1 && was && was.length > 1) fresh[cs[0]] = true;
+      });
+    }
+    (st.focus || []).forEach(function (t) { if (t >= 0 && t < T) focus |= 1 << t; });
+    return { fixed: fixed, masks: masks, elim: elim, fresh: fresh, focus: focus, dots: masks.some(Boolean) };
+  }
+
+  function solCellsHTML(S, st) {
+    var seenRoom = {}, nc = noteCols();
+    var rows = st.rows || [], cols = st.cols || [], rooms = st.rooms || [];
+    var h = '';
+    G.cells.forEach(function (cell) {
+      var i = cell.i, b = cellBase(cell, seenRoom), t = S.fixed[i], cls = b.cls;
+      var mask = t < 0 ? S.masks[i] : 0, gone = t < 0 ? S.elim[i] : 0;
+      if (rows.indexOf(cell.r) >= 0 || cols.indexOf(cell.c) >= 0 || rooms.indexOf(cell.room) >= 0) cls.push('is-hl');
+      if (t >= 0) cls.push('has-token');
+      if (!cell.blocked && t < 0 && !mask) cls.push('is-auto-x');
+      if (gone) cls.push('is-elim');
+      if (mask) cls.push('has-notes');
+      var inner = b.inner + '<span class="sol-hl"></span><span class="c-x">×</span>';
+      if (gone) inner += '<span class="sol-x">×</span>';
+      if (mask || gone) {
+        inner += '<span class="c-notes">';
+        for (var u = 0; u < G.place.length; u++) {
+          var bit = 1 << u;
+          if (!(mask & bit) && !(gone & bit)) continue;
+          var col = tokenColor(u);
+          var cut = !!(gone & bit), dim = !cut && S.focus && !(S.focus & bit);
+          inner += '<span class="c-note' + (G.p.tokens[u].kind === 'snack' ? ' is-snack' : '') + (cut ? ' is-cut' : '') + (dim ? ' is-dim' : '') +
+            '" style="--tc:' + col + ';--tx:' + textOn(col) + ';grid-area:' + (Math.floor(u / nc) + 1) + '/' + (u % nc + 1) + '">' + esc(tokenInitial(u)) + '</span>';
+        }
+        inner += '</span>';
+      }
+      if (t >= 0) {
+        var guilty = st.kind === 'final' && t === G.p.culprit;
+        inner += '<span class="c-tok"><span class="token ' + (G.p.tokens[t].kind === 'snack' ? 'is-snack' : 'is-dog') + (S.fresh[i] ? ' is-new' : '') +
+          (guilty ? ' is-culprit' : '') + '" style="--tc:' + tokenColor(t) + '">' +
+          '<span class="token-art">' + tokenArt(t, guilty ? 'guilty' : 'normal') + '</span></span></span>';
+      }
+      h += '<div class="' + cls.join(' ') + '" style="' + b.style + '">' + inner + '</div>';
+    });
+    return h;
+  }
+
+  function solBoardLabel(S, st) {
+    var parts = [];
+    S.fixed.forEach(function (t, i) { if (t >= 0) parts.push(tokenName(t) + ' auf ' + cellName(i)); });
+    var txt = parts.length ? 'Gesetzt: ' + parts.join(', ') + '.' : 'Noch niemand gesetzt.';
+    (st.focus || []).forEach(function (t) {
+      var cs = (st.cand || [])[t] || [];
+      if (cs.length > 1) txt += ' ' + tokenName(t) + ' kann noch auf ' + cs.map(cellName).join(', ') + '.';
+    });
+    var cut = 0;
+    (st.elim || []).forEach(function (e) { cut += (e.cells || []).length; });
+    if (cut) txt += ' In diesem Schritt ' + (cut === 1 ? 'fällt eine Möglichkeit' : 'fallen ' + cut + ' Möglichkeiten') + ' weg.';
+    return txt;
+  }
+
+  function solLegendHTML(S, st) {
+    var h = '<ul class="sol-legend" aria-hidden="true">';
+    if (Object.keys(S.fresh).length) h += '<li><span class="sl-new"></span>neu gesetzt</li>';
+    if ((st.elim || []).length) h += '<li><span class="sl-x">×</span>fällt weg</li>';
+    if (S.dots) h += '<li><span class="sl-dot"></span>noch möglich</li>';
+    if (solHasHL(st)) h += '<li><span class="sl-hl"></span>im Blick</li>';
+    return h + '</ul>';
+  }
+
+  function solGo(d) {
+    if (!G || !G.solData || !G.solEl || G.solEl.classList.contains('is-confirm')) return;
+    var k = G.solIdx + d;
+    if (!d || k < 0 || k >= G.solData.steps.length) return;
+    var act = document.activeElement;
+    var foc = act && G.solEl.contains(act) ? act.getAttribute('data-sol') : null;
+    G.solIdx = k;
+    G.solDir = reducedMotion() ? 0 : (d > 0 ? 1 : -1);
+    renderSolStep();
+    // Fokus bleibt auf dem gleichen Knopf (bzw. springt zum anderen, wenn der Rand erreicht ist).
+    if (foc === 'prev' || foc === 'next') {
+      var b = G.solEl.querySelector('[data-sol="' + foc + '"]');
+      if (!b || b.disabled) b = G.solEl.querySelector('[data-sol="' + (foc === 'prev' ? 'next' : 'prev') + '"]');
+      if (b) b.focus({ preventScroll: true });
+    } else if (foc) focusSol();
+  }
+
+  /* Den Stand des aktuellen Schritts aufs echte Brett legen: feste Figuren setzen, Kandidaten als Notizen. */
+  function applySolStep() {
+    if (!G || G.solved || !G.solData) return;
+    var st = solStep(G.solIdx);
+    var n = G.n, N = n * n, T = G.place.length;
+    var place = fill(T, -1), notes = fill(N, 0), marks = fill(N, false);
+    (st.cand || []).forEach(function (cs, t) {
+      if (t < T && cs && cs.length === 1 && !G.cells[cs[0]].blocked && place.indexOf(cs[0]) < 0) place[t] = cs[0];
+    });
+    (st.cand || []).forEach(function (cs, t) {
+      if (t >= T || !cs || place[t] >= 0) return;
+      cs.forEach(function (i) { if (i >= 0 && i < N && !G.cells[i].blocked) notes[i] |= 1 << t; });
+    });
+    var rowUsed = fill(n, false), colUsed = fill(n, false);
+    place.forEach(function (c) { if (c >= 0) { rowUsed[Math.floor(c / n)] = true; colUsed[c % n] = true; } });
+    // Felder, auf die niemand mehr kann, bekommen ein × (Reihen/Spalten gesetzter Figuren streicht das Brett eh schon).
+    G.cells.forEach(function (cell, i) {
+      if (!cell.blocked && place.indexOf(i) < 0 && !notes[i] && !rowUsed[cell.r] && !colUsed[cell.c]) marks[i] = true;
+    });
+    pushUndo();
+    G.place = place;
+    G.notes = notes;
+    G.marks = marks;
+    G.selected = nextUnplaced(-1);
+    G.view = G.selected >= 0 ? G.selected : 0;
+    var k = G.solIdx + 1;
+    closeSol(true);
+    updateAll();
+    if (isMobile()) G.els.frame.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    toast('Stand von Schritt ' + k + ' liegt auf dem Brett. ↶ macht’s rückgängig.', 'hint');
+    announce('Stand von Schritt ' + k + ' aufs Brett übernommen.');
+  }
+
+  function onSolClick(e) {
+    var b = e.target.closest('[data-sol]');
+    if (!b || b.disabled) return;
+    var act = b.getAttribute('data-sol');
+    if (act === 'close') closeSol();
+    else if (act === 'yes') showSolSteps();
+    else if (act === 'prev') solGo(-1);
+    else if (act === 'next') solGo(1);
+    else if (act === 'apply') applySolStep();
+  }
+
+  /* Wischen im Lösungsweg: nach links = weiter, nach rechts = zurück. */
+  function onSolSwipe(e) {
+    if (!G || !e.isPrimary || e.pointerType === 'mouse') return;
+    var x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+    function up(ev) {
+      if (ev.pointerId !== id) return;
+      cleanup();
+      var dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.6) solGo(dx < 0 ? 1 : -1);
+    }
+    function cancel(ev) { if (ev.pointerId === id) cleanup(); }
+    function cleanup() {
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+    }
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+  }
+
+  /* Tasten bei offenem Lösungsweg. true = erledigt. */
+  function onSolKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); closeSol(); return true; }
+    if (e.ctrlKey || e.metaKey || e.altKey || G.solEl.classList.contains('is-confirm')) return false;
+    // Auf dem echten Brett gehören die Pfeiltasten dem Brett.
+    if (e.target && e.target.closest && e.target.closest('.board:not(.sol-board)')) return false;
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown') { e.preventDefault(); solGo(1); return true; }
+    if (k === 'ArrowLeft' || k === 'PageUp') { e.preventDefault(); solGo(-1); return true; }
+    if (k === 'Home' && G.solData) { e.preventDefault(); solGo(-G.solIdx); return true; }
+    return false;
+  }
+
+  function solStatHTML() {
+    if (G.stepsMax < 0) return '<dd class="dd-text">nicht benutzt</dd>';
+    var total = G.solData ? G.solData.steps.length : G.stepsTotal;
+    return '<dd>' + (G.stepsMax + 1) + (total ? ' / ' + total : '') + '<small>Schritte angesehen</small></dd>';
   }
 
   /* ---------- Gaswolken-Effekte ---------- */
@@ -1545,7 +1889,7 @@
       '<p class="reveal-name">' + esc(tokenName(culprit)) + '</p>' +
       '<p class="verdict">' + esc(p.verdict) + '</p>' +
       '<dl class="reveal-stats"><div><dt>Zeit</dt><dd>' + fmtTime(time) + '</dd></div>' +
-      '<div><dt>Tipps</dt><dd>' + G.hints + ' / ' + MAX_HINTS + '</dd></div></dl>' +
+      '<div><dt>Lösungsweg</dt>' + solStatHTML() + '</div></dl>' +
       '<div class="reveal-actions">' +
       '<button type="button" class="btn btn-primary btn-big" data-reveal-next>' + esc(nx.label) + '</button>' +
       '<a class="btn" href="#akten">Zu den Akten</a>' +
@@ -1753,6 +2097,7 @@
       return;
     }
     if (rulesOpen() || !G) return;
+    if (G.solEl && onSolKey(e)) return;
     var tag = (e.target && e.target.tagName) || '';
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
@@ -1777,7 +2122,7 @@
       var act = a.getAttribute('data-action');
       if (act === 'rules') openRules();
       else if (act === 'undo') undo();
-      else if (act === 'hint') useHint();
+      else if (act === 'steps') openSol();
       else if (act === 'clear') armClear();
       else if (act === 'solve') checkSolution();
       else if (act === 'roll') rollRandom();

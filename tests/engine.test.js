@@ -23,6 +23,35 @@ function checkPuzzle(p) {
   assert.strictEqual(rows.size, p.n);
   assert.strictEqual(cols.size, p.n);
   for (const c of p.clues) assert.ok(c.text.length > 5 && !c.text.includes('undefined'), `${p.id}: Text kaputt: ${c.text}`);
+  checkSteps(p);
+}
+
+// Lösungsweg: ohne Raten vollständig, jeder Schritt korrekt, Stufen-Budget für Gedankenexperimente eingehalten.
+function checkSteps(p) {
+  const res = FD.solutionSteps(p);
+  assert.ok(res.solved, `${p.id}: Lösungsweg bleibt stecken`);
+  const steps = res.steps;
+  assert.strictEqual(steps[0].kind, 'start');
+  assert.strictEqual(steps[steps.length - 1].kind, 'final');
+  const T = p.tokens.length;
+  let prev = steps[0].cand;
+  for (const [k, s] of steps.entries()) {
+    const where = `${p.id} Schritt ${k} (${s.kind})`;
+    assert.ok(s.title && s.text && !/undefined|NaN|null/.test(s.title + s.text), `${where}: Text kaputt: ${s.title} :: ${s.text}`);
+    assert.strictEqual(s.cand.length, T);
+    for (let t = 0; t < T; t++) {
+      assert.ok(s.cand[t].includes(p.solution[t]), `${where}: richtige Position von ${p.tokens[t].name} gestrichen`);
+      assert.ok(s.cand[t].every((i) => prev[t].includes(i)), `${where}: Kandidaten wachsen`);
+    }
+    if (k > 0 && s.kind !== 'final') assert.ok(s.elim.length || s.place.length, `${where}: Schritt ohne Wirkung`);
+    for (const e of s.elim) for (const i of e.cells) assert.ok(!s.cand[e.t].includes(i), `${where}: Streichung nicht übernommen`);
+    if (s.clue != null) assert.ok(p.clues[s.clue], `${where}: Hinweis fehlt`);
+    prev = s.cand;
+  }
+  assert.ok(prev.every((c, t) => c.length === 1 && c[0] === p.solution[t]), `${p.id}: Endstand ist nicht die Lösung`);
+  const trials = steps.filter((s) => s.kind === 'trial').length;
+  assert.ok(trials <= FD.engine.TRIAL_BUDGET[p.level - 1], `${p.id}: ${trials} Gedankenexperimente auf Stufe ${p.level}`);
+  return steps.length;
 }
 
 function mapOf(p) {
@@ -38,7 +67,8 @@ for (const def of FD.CASES) {
     const p = FD.getCase(def.id);
     const ms = Date.now() - t0;
     checkPuzzle(p);
-    console.log(`  ${def.id} ${p.n}x${p.n} L${p.level}: ${p.clues.length} Hinweise, Täter ${p.tokens[p.culprit].name}, ${ms} ms`);
+    const st = FD.solutionSteps(p).steps;
+    console.log(`  ${def.id} ${p.n}x${p.n} L${p.level}: ${p.clues.length} Hinweise, ${st.length} Schritte (${st.filter((x) => x.kind === 'trial').length} Annahmen), Täter ${p.tokens[p.culprit].name}, ${ms} ms`);
   });
 }
 
